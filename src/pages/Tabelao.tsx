@@ -160,7 +160,12 @@ export default function Tabelao() {
       const loteNome = selectedLoteIds.length === 1
         ? allDoneLotes.find((l) => l.id === selectedLoteIds[0])?.nome ?? 'Lote'
         : `${selectedLoteIds.length} lotes`;
-      const bytes = generatePdfBytes(notasFiltradas, resumoFiltrado, loteNome);
+      const empresaNome = selectedLoteIds.length === 1
+        ? (data.empresas.find((e) =>
+            e.lotes.some((l) => l.id === selectedLoteIds[0])
+          )?.nome ?? '')
+        : 'Múltiplas empresas';
+      const bytes = generatePdfBytes(notasFiltradas, resumoFiltrado, loteNome, empresaNome);
       await writeFile(savePath, bytes);
       toast.success('PDF exportado com sucesso');
     } catch {

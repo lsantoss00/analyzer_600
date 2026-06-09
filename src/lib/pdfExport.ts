@@ -7,7 +7,7 @@ function brl(v: number): string {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string): Uint8Array {
+export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string, empresaNome: string): Uint8Array {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
   // Header
@@ -17,8 +17,8 @@ export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string)
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Lote: ${loteNome}`, 14, 26);
-  doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 31);
+  doc.text(`Empresa: ${empresaNome}`, 14, 26);
+  doc.text(`Lote: ${loteNome}`, 14, 31);
 
   // KPI summary
   const kpis = [
