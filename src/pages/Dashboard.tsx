@@ -30,7 +30,7 @@ function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const COLORS = ['#1e40af', '#64748b'];
+const COLORS = ['#4f8ef7', '#334155'];
 
 export default function Dashboard() {
   const { data } = useAppData();
@@ -193,7 +193,7 @@ export default function Dashboard() {
                       <Tooltip
                         formatter={(v) => [`R$ ${brl(Number(v))}`, 'Valor']}
                       />
-                      <Bar dataKey="valor" fill="#1e40af" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="valor" fill="#4f8ef7" radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -232,7 +232,7 @@ export default function Dashboard() {
                         ieGroups.find((g) => g.ie === String(ie))?.xNome ?? String(ie)
                       }
                     />
-                    <Bar dataKey="valorTotal" fill="#1e40af" radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="valorTotal" fill="#4f8ef7" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
