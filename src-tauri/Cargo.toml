@@ -1,0 +1,38 @@
+[package]
+name = "analyzer-600"
+version = "0.1.0"
+description = "Analisador de NF-e"
+authors = ["lsantoss00"]
+edition = "2021"
+
+[lib]
+name = "analyzer_600_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-sql = { version = "2", features = ["sqlite"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+roxmltree = "0.19"
+rayon = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio = { version = "1", features = ["full"] }
+walkdir = "2"
+
+# MinGW no Windows tem limite de 65535 símbolos exportados por DLL.
+# opt-level = 1 elimina os genéricos redundantes do build debug sem custo de tempo perceptível.
+[profile.dev]
+opt-level = 1
+
+# Dependências sempre otimizadas — parsing e SQLite ficam rápidos mesmo em dev.
+[profile.dev.package."*"]
+opt-level = 3
