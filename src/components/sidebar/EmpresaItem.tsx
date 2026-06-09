@@ -5,7 +5,6 @@ import {
   ChevronRight,
   GripVertical,
   Pencil,
-  Plus,
   Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
@@ -29,15 +28,13 @@ interface Props {
 }
 
 export default function EmpresaItem({ empresa }: Props) {
-  const { data, editEmpresa, removeEmpresa, addLote, setEmpresaAtiva } = useAppData();
+  const { data, editEmpresa, removeEmpresa, setEmpresaAtiva } = useAppData();
   const isActive = data.empresaAtiva === empresa.id;
 
   const [expanded, setExpanded] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
-  const [addLoteOpen, setAddLoteOpen] = useState(false);
   const [nome, setNome] = useState(empresa.nome);
   const [cnpj, setCnpj] = useState(empresa.cnpj);
-  const [loteNome, setLoteNome] = useState('');
   const [saving, setSaving] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -73,22 +70,6 @@ export default function EmpresaItem({ empresa }: Props) {
     }
   }
 
-  async function handleAddLote() {
-    if (!loteNome.trim()) return;
-    setSaving(true);
-    try {
-      await addLote(empresa.id, loteNome.trim());
-      setEmpresaAtiva(empresa.id);
-      toast.success('Lote criado');
-      setLoteNome('');
-      setAddLoteOpen(false);
-    } catch {
-      toast.error('Erro ao criar lote');
-    } finally {
-      setSaving(false);
-    }
-  }
-
   return (
     <div ref={setNodeRef} style={style} className="mb-1">
       {/* Empresa row */}
@@ -112,14 +93,6 @@ export default function EmpresaItem({ empresa }: Props) {
         )}
         <span className="flex-1 truncate text-sm font-medium">{empresa.nome}</span>
         <span className="ml-auto flex opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5"
-            onClick={(e) => { e.stopPropagation(); setAddLoteOpen(true); }}
-          >
-            <Plus className="h-3 w-3" />
-          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -169,25 +142,6 @@ export default function EmpresaItem({ empresa }: Props) {
         </DialogContent>
       </Dialog>
 
-      {/* Add Lote dialog */}
-      <Dialog open={addLoteOpen} onOpenChange={setAddLoteOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Novo Lote</DialogTitle></DialogHeader>
-          <div className="grid gap-1.5 py-2">
-            <Label>Nome do lote *</Label>
-            <Input
-              placeholder="Ex: Janeiro 2024"
-              value={loteNome}
-              onChange={(e) => setLoteNome(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddLote()}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddLoteOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAddLote} disabled={!loteNome.trim() || saving}>Criar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

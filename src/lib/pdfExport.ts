@@ -69,5 +69,5 @@ export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string)
     margin: { left: 14, right: 14 },
   });
 
-  return doc.output('arraybuffer') as unknown as Uint8Array;
+  return new Uint8Array(doc.output('arraybuffer') as ArrayBuffer);
 }

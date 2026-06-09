@@ -86,7 +86,9 @@ export default function Dashboard() {
           </div>
           <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? '')}>
             <SelectTrigger className="w-60">
-              <SelectValue placeholder="Selecione um lote" />
+              <SelectValue placeholder="Selecione um lote">
+                {selectedLoteId ? allLotes.find((l) => l.id === selectedLoteId)?.nome : undefined}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {allLotes.map((l) => (

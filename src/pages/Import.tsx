@@ -304,7 +304,9 @@ export default function Import() {
                 onValueChange={(v) => setEmpresaId(v ?? '')}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma empresa" />
+                  <SelectValue placeholder="Selecione uma empresa">
+                    {empresaId ? data.empresas.find((e) => e.id === empresaId)?.nome : undefined}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {data.empresas.map((e) => (

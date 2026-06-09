@@ -1,5 +1,5 @@
 import { save } from '@tauri-apps/plugin-dialog';
-import { invoke } from '@tauri-apps/api/core';
+import { writeFile } from '@tauri-apps/plugin-fs';
 import {
   FileSpreadsheet,
   FileText,
@@ -143,7 +143,7 @@ export default function Tabelao() {
     if (!savePath) return;
     try {
       const bytes = generateExcelBytes(notasFiltradas);
-      await invoke<void>('save_bytes', { path: savePath, bytes: Array.from(bytes) });
+      await writeFile(savePath, bytes);
       toast.success(`Excel exportado: ${groups.length} IEs, ${notasFiltradas.length} notas`);
     } catch {
       toast.error('Erro ao exportar Excel');
@@ -161,7 +161,7 @@ export default function Tabelao() {
         ? allDoneLotes.find((l) => l.id === selectedLoteIds[0])?.nome ?? 'Lote'
         : `${selectedLoteIds.length} lotes`;
       const bytes = generatePdfBytes(notasFiltradas, resumoFiltrado, loteNome);
-      await invoke<void>('save_bytes', { path: savePath, bytes: Array.from(bytes) });
+      await writeFile(savePath, bytes);
       toast.success('PDF exportado com sucesso');
     } catch {
       toast.error('Erro ao exportar PDF');
