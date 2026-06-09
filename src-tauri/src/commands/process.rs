@@ -174,6 +174,7 @@ pub fn scan_folder(path: String) -> Result<Vec<String>, String> {
     use walkdir::WalkDir;
 
     let paths: Vec<String> = WalkDir::new(&path)
+        .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
