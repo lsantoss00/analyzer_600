@@ -99,11 +99,25 @@ export default function Tabelao() {
   // ── filters & sort ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
   const [cfFilter, setCfFilter] = useState<'all' | 'cf' | 'ncf'>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('valorTotal');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
-  const allGroups = useMemo(() => buildIeGroups(notas), [notas]);
+  // Date filter applied at nota level BEFORE building IeGroups
+  // so values/counts per IE reflect only the selected period
+  const notasDateFiltered = useMemo(() => {
+    if (!dateFrom && !dateTo) return notas;
+    return notas.filter((n) => {
+      const d = n.dataEmissao.slice(0, 10);
+      if (dateFrom && d < dateFrom) return false;
+      if (dateTo && d > dateTo) return false;
+      return true;
+    });
+  }, [notas, dateFrom, dateTo]);
+
+  const allGroups = useMemo(() => buildIeGroups(notasDateFiltered), [notasDateFiltered]);
 
   const filteredGroups: IeGroup[] = useMemo(() => {
     let g = allGroups;
@@ -149,17 +163,17 @@ export default function Tabelao() {
 
   const cfopCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const n of notas) map.set(n.cfop, (map.get(n.cfop) ?? 0) + 1);
+    for (const n of notasDateFiltered) map.set(n.cfop, (map.get(n.cfop) ?? 0) + 1);
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [notas]);
+  }, [notasDateFiltered]);
 
   const resumo: Resumo = useMemo(() => ({
-    notasTotais: notas.length,
+    notasTotais: notasDateFiltered.length,
     iesTotal: allGroups.length,
     iesConsumidorFinal: allGroups.filter((g) => g.isConsumidorFinal).length,
     iesNaoConsumidor: allGroups.filter((g) => !g.isConsumidorFinal).length,
-    valorTotal: notas.reduce((s, n) => s + n.vNf, 0),
-  }), [notas, allGroups]);
+    valorTotal: notasDateFiltered.reduce((s, n) => s + n.vNf, 0),
+  }), [notasDateFiltered, allGroups]);
 
   // ── breadcrumb ──────────────────────────────────────────────────────────────
   const loteBreadcrumb =
@@ -381,13 +395,15 @@ export default function Tabelao() {
                   )}
                 </div>
                 <Button
-                  variant={showFilters || cfFilter !== 'all' ? 'default' : 'outline'}
+                  variant={showFilters || cfFilter !== 'all' || dateFrom || dateTo ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => setShowFilters((v) => !v)}
                 >
                   <ListFilter className="h-3.5 w-3.5 mr-1.5" /> Filtros
-                  {cfFilter !== 'all' && (
-                    <Badge className="ml-1.5 h-4 w-4 p-0 text-[10px] flex items-center justify-center">1</Badge>
+                  {(cfFilter !== 'all' || dateFrom || dateTo) && (
+                    <Badge className="ml-1.5 h-4 w-4 p-0 text-[10px] flex items-center justify-center">
+                      {(cfFilter !== 'all' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0)}
+                    </Badge>
                   )}
                 </Button>
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -397,28 +413,64 @@ export default function Tabelao() {
 
               {/* ── expanded filter panel ── */}
               {showFilters && (
-                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border px-4 py-3">
-                  <span className="text-xs text-muted-foreground font-medium">Consumidor Final:</span>
-                  {(['all', 'ncf', 'cf'] as const).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setCfFilter(v)}
-                      className={[
-                        'text-xs px-3 py-1 rounded-full border transition-colors',
-                        cfFilter === v
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'border-border text-muted-foreground hover:border-primary/50',
-                      ].join(' ')}
-                    >
-                      {v === 'all' ? 'Todos' : v === 'cf' ? 'Somente CF' : 'Somente Não-CF'}
-                    </button>
-                  ))}
-                  {cfFilter !== 'all' && (
-                    <button type="button" className="text-xs text-muted-foreground hover:text-foreground ml-auto" onClick={() => setCfFilter('all')}>
-                      Limpar
-                    </button>
-                  )}
+                <div className="rounded-lg border border-border px-4 py-3 space-y-3">
+                  {/* Date range */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground font-medium w-24 shrink-0">Período:</span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="w-36 text-xs h-8"
+                      />
+                      <span className="text-xs text-muted-foreground">até</span>
+                      <Input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="w-36 text-xs h-8"
+                      />
+                      {(dateFrom || dateTo) && (
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                          onClick={() => { setDateFrom(''); setDateTo(''); }}
+                        >
+                          <X className="h-3 w-3" /> limpar
+                        </button>
+                      )}
+                    </div>
+                    {(dateFrom || dateTo) && (
+                      <span className="text-xs text-primary ml-1">
+                        {notas.length - notasDateFiltered.length > 0
+                          ? `${notas.length - notasDateFiltered.length} notas filtradas por data`
+                          : 'Todas as notas no período'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* CF filter */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground font-medium w-24 shrink-0">Cons. Final:</span>
+                    <div className="flex items-center gap-2">
+                      {(['all', 'ncf', 'cf'] as const).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setCfFilter(v)}
+                          className={[
+                            'text-xs px-3 py-1 rounded-full border transition-colors',
+                            cfFilter === v
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'border-border text-muted-foreground hover:border-primary/50',
+                          ].join(' ')}
+                        >
+                          {v === 'all' ? 'Todos' : v === 'cf' ? 'Somente CF' : 'Somente Não-CF'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
