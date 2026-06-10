@@ -91,11 +91,22 @@ export default function Dashboard() {
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {allLotes.map((l) => (
-                <SelectItem key={l.id} value={l.id}>
-                  {l.nome}
-                </SelectItem>
-              ))}
+              {data.empresas.map((empresa) => {
+                const doneLotes = empresa.lotes.filter((l) => l.status === 'done');
+                if (doneLotes.length === 0) return null;
+                return (
+                  <div key={empresa.id}>
+                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                      {empresa.nome}
+                    </div>
+                    {doneLotes.map((l) => (
+                      <SelectItem key={l.id} value={l.id} className="pl-5">
+                        {l.nome}
+                      </SelectItem>
+                    ))}
+                  </div>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

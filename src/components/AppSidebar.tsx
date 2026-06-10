@@ -13,7 +13,6 @@ import {
 } from '@dnd-kit/sortable';
 import {
   BarChart3,
-  FileUp,
   LayoutGrid,
   Plus,
   Settings,
@@ -95,9 +94,6 @@ export default function AppSidebar() {
 
       {/* Nav */}
       <nav className="flex flex-col gap-1 px-2 py-3 border-b">
-        <NavLink to="/import" className={navClass}>
-          <FileUp className="h-4 w-4" /> Importar
-        </NavLink>
         <NavLink to="/dashboard" className={navClass}>
           <BarChart3 className="h-4 w-4" /> Dashboard
         </NavLink>

@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, Loader2, Pencil, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Lote } from '@/lib/types';
@@ -27,6 +28,7 @@ const statusIcon = {
 
 export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
   const { data, setLoteAtivo, editLoteNome, removeLote } = useAppData();
+  const navigate = useNavigate();
   const isActive = data.loteAtivo === lote.id;
   const [editOpen, setEditOpen] = useState(false);
   const [nome, setNome] = useState(lote.nome);
@@ -65,7 +67,7 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
             ? 'bg-sidebar-accent text-sidebar-accent-foreground'
             : 'hover:bg-sidebar-accent/40 text-sidebar-foreground',
         ].join(' ')}
-        onClick={() => setLoteAtivo(lote.id)}
+        onClick={() => { setLoteAtivo(lote.id); navigate('/import'); }}
       >
         {statusIcon[lote.status]}
         <span className="flex-1 truncate">{lote.nome}</span>

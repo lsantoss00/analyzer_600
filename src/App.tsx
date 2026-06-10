@@ -12,7 +12,7 @@ export default function App() {
     <AppDataProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/import" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/import" element={<Import />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/tabelao" element={<Tabelao />} />
