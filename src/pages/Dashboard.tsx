@@ -2,6 +2,7 @@ import {
   BarChart,
   Bar,
   Cell,
+  Legend,
   PieChart,
   Pie,
   Tooltip,
@@ -30,7 +31,20 @@ function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const COLORS = ['#4f8ef7', '#334155'];
+// Recharts tooltip styled for dark theme
+const tooltipStyle = {
+  contentStyle: {
+    background: 'oklch(0.21 0.028 254)',
+    border: '1px solid oklch(0.31 0.024 255)',
+    borderRadius: '6px',
+    color: 'oklch(0.94 0.007 255)',
+    fontSize: '12px',
+  },
+  labelStyle: { color: 'oklch(0.94 0.007 255)', fontWeight: 600 },
+  cursor: { fill: 'oklch(0.31 0.024 255 / 0.4)' },
+};
+
+const PIE_COLORS = ['#4f8ef7', '#334155'];
 
 export default function Dashboard() {
   const { data } = useAppData();
@@ -62,30 +76,30 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [selectedLoteId]);
 
-  // Keep in sync with sidebar selection
   useEffect(() => {
     if (data.loteAtivo && allLotes.some((l) => l.id === data.loteAtivo)) {
       setSelectedLoteId(data.loteAtivo);
     }
-  }, [data.loteAtivo]);
+  }, [data.loteAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pieData = resumo
     ? [
-        { name: 'Cons. Final', value: resumo.iesConsumidorFinal },
         { name: 'Não Cons. Final', value: resumo.iesNaoConsumidor },
+        { name: 'Cons. Final', value: resumo.iesConsumidorFinal },
       ]
     : [];
 
   return (
     <AppLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col h-full overflow-hidden p-5 gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between shrink-0">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
-            <p className="text-sm text-muted-foreground mt-1">Análise do lote selecionado</p>
+            <h1 className="text-xl font-bold">Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Análise do lote selecionado</p>
           </div>
           <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? '')}>
-            <SelectTrigger className="w-60">
+            <SelectTrigger className="w-56">
               <SelectValue placeholder="Selecione um lote">
                 {selectedLoteId ? allLotes.find((l) => l.id === selectedLoteId)?.nome : undefined}
               </SelectValue>
@@ -112,13 +126,13 @@ export default function Dashboard() {
         </div>
 
         {!lote && (
-          <div className="flex justify-center py-20 text-muted-foreground text-sm">
+          <div className="flex justify-center items-center flex-1 text-muted-foreground text-sm">
             Nenhum lote processado. Importe XMLs primeiro.
           </div>
         )}
 
         {lote && loading && (
-          <div className="flex items-center gap-2 justify-center py-20 text-muted-foreground">
+          <div className="flex items-center gap-2 justify-center flex-1 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Carregando dados...</span>
           </div>
@@ -126,8 +140,8 @@ export default function Dashboard() {
 
         {lote && !loading && resumo && (
           <>
-            {/* KPIs */}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {/* KPI row */}
+            <div className="grid grid-cols-4 gap-3 shrink-0">
               <StatCard
                 label="Total de Notas"
                 value={resumo.notasTotais.toLocaleString('pt-BR')}
@@ -154,55 +168,64 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Charts row */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            {/* Charts row — fills remaining height */}
+            <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
               {/* Donut */}
-              <Card>
-                <CardHeader className="pb-2">
+              <Card className="flex flex-col overflow-hidden">
+                <CardHeader className="pb-1 shrink-0">
                   <CardTitle className="text-sm font-medium">IEs por Tipo</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
+                <CardContent className="flex-1 min-h-0 pb-2">
+                  <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={pieData}
                         cx="50%"
-                        cy="50%"
-                        innerRadius={55}
-                        outerRadius={80}
+                        cy="45%"
+                        innerRadius="45%"
+                        outerRadius="65%"
                         paddingAngle={3}
                         dataKey="value"
-                        label={({ name, value }) => `${name}: ${value}`}
-                        labelLine={false}
                       >
                         {pieData.map((_, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(v) => Number(v).toLocaleString('pt-BR')} />
+                      <Tooltip
+                        formatter={(v) => Number(v).toLocaleString('pt-BR')}
+                        {...tooltipStyle}
+                      />
+                      <Legend
+                        verticalAlign="bottom"
+                        height={32}
+                        formatter={(value) => (
+                          <span style={{ color: 'oklch(0.72 0.014 258)', fontSize: 11 }}>{value}</span>
+                        )}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
               </Card>
 
-              {/* Monthly bar */}
-              <Card className="lg:col-span-2">
-                <CardHeader className="pb-2">
+              {/* Monthly bar — 2 cols */}
+              <Card className="col-span-2 flex flex-col overflow-hidden">
+                <CardHeader className="pb-1 shrink-0">
                   <CardTitle className="text-sm font-medium">Valor por Mês (R$)</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart data={monthStats} margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <CardContent className="flex-1 min-h-0 pb-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthStats} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.31 0.024 255 / 0.5)" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'oklch(0.72 0.014 258)' }} />
                       <YAxis
-                        tick={{ fontSize: 11 }}
+                        tick={{ fontSize: 11, fill: 'oklch(0.72 0.014 258)' }}
                         tickFormatter={(v: number) =>
                           v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
                         }
                       />
                       <Tooltip
                         formatter={(v) => [`R$ ${brl(Number(v))}`, 'Valor']}
+                        {...tooltipStyle}
                       />
                       <Bar dataKey="valor" fill="#4f8ef7" radius={[3, 3, 0, 0]} />
                     </BarChart>
@@ -211,22 +234,22 @@ export default function Dashboard() {
               </Card>
             </div>
 
-            {/* IE ranking */}
-            <Card>
-              <CardHeader className="pb-2">
+            {/* IE ranking — fixed portion */}
+            <Card className="shrink-0" style={{ height: '220px' }}>
+              <CardHeader className="pb-1">
                 <CardTitle className="text-sm font-medium">Top 10 IEs por Valor</CardTitle>
               </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
+              <CardContent className="h-42">
+                <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     layout="vertical"
                     data={ieGroups}
                     margin={{ top: 0, right: 60, left: 20, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.31 0.024 255 / 0.5)" />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: 10 }}
+                      tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 258)' }}
                       tickFormatter={(v: number) =>
                         v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
                       }
@@ -234,14 +257,15 @@ export default function Dashboard() {
                     <YAxis
                       type="category"
                       dataKey="ie"
-                      width={110}
-                      tick={{ fontSize: 10 }}
+                      width={90}
+                      tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 258)' }}
                     />
                     <Tooltip
                       formatter={(v) => [`R$ ${brl(Number(v))}`, 'Valor Total']}
                       labelFormatter={(ie) =>
                         ieGroups.find((g) => g.ie === String(ie))?.xNome ?? String(ie)
                       }
+                      {...tooltipStyle}
                     />
                     <Bar dataKey="valorTotal" fill="#4f8ef7" radius={[0, 3, 3, 0]} />
                   </BarChart>
