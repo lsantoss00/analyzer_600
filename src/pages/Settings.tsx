@@ -1,8 +1,27 @@
+import { useState } from 'react';
+import { toast } from 'sonner';
 import AppLayout from '@/components/AppLayout';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 
 export default function Settings() {
+  const [metaIes, setMetaIes] = useState(
+    () => localStorage.getItem('meta_ies') ?? '600',
+  );
+
+  function saveMeta() {
+    const n = parseInt(metaIes, 10);
+    if (isNaN(n) || n <= 0) {
+      toast.error('Meta inválida. Informe um número maior que zero.');
+      return;
+    }
+    localStorage.setItem('meta_ies', String(n));
+    toast.success('Meta salva com sucesso.');
+  }
+
   return (
     <AppLayout>
       <div className="p-6 space-y-6 max-w-2xl">
@@ -10,6 +29,31 @@ export default function Settings() {
           <h1 className="text-2xl font-bold">Configurações</h1>
           <p className="text-sm text-muted-foreground mt-1">Preferências do aplicativo</p>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Meta — Decreto 9.025</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Número de IEs Não-Consumidor Final distintas por trimestre exigidas pelo decreto para manter o incentivo fiscal.
+            </p>
+            <div className="flex items-end gap-3">
+              <div className="space-y-1.5 flex-1 max-w-45">
+                <Label htmlFor="meta-ies" className="text-sm">Meta de IEs por trimestre</Label>
+                <Input
+                  id="meta-ies"
+                  type="number"
+                  min={1}
+                  value={metaIes}
+                  onChange={(e) => setMetaIes(e.target.value)}
+                  className="font-mono"
+                />
+              </div>
+              <Button onClick={saveMeta}>Salvar</Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

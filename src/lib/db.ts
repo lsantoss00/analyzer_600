@@ -231,6 +231,30 @@ export function buildIeGroups(notas: NFe[]): IeGroup[] {
 }
 
 // ---------------------------------------------------------------------------
+// IE group comparison (Decreto 9.025 — tracks changes between two periods)
+// ---------------------------------------------------------------------------
+
+export interface IeComparison {
+  lost: IeGroup[];       // NCF in A, gone in B (not CF either)
+  common: IeGroup[];     // NCF in both A and B
+  gained: IeGroup[];     // NCF in B only (new)
+  changedToCF: IeGroup[]; // was NCF in A, now CF in B
+}
+
+export function compareIeGroups(a: IeGroup[], b: IeGroup[]): IeComparison {
+  const ncfA = new Map(a.filter((g) => !g.isConsumidorFinal).map((g) => [g.ie, g]));
+  const ncfB = new Map(b.filter((g) => !g.isConsumidorFinal).map((g) => [g.ie, g]));
+  const cfB = new Set(b.filter((g) => g.isConsumidorFinal).map((g) => g.ie));
+
+  return {
+    lost: [...ncfA.values()].filter((g) => !ncfB.has(g.ie) && !cfB.has(g.ie)),
+    common: [...ncfA.values()].filter((g) => ncfB.has(g.ie)),
+    gained: [...ncfB.values()].filter((g) => !ncfA.has(g.ie)),
+    changedToCF: [...ncfA.values()].filter((g) => cfB.has(g.ie)),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Month groups (for MesAccordion)
 // ---------------------------------------------------------------------------
 
