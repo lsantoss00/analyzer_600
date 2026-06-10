@@ -11,6 +11,9 @@ export default function Settings() {
   const [metaIes, setMetaIes] = useState(
     () => localStorage.getItem('meta_ies') ?? '600',
   );
+  const [valorMinimoIe, setValorMinimoIe] = useState(
+    () => localStorage.getItem('valor_minimo_ie') ?? '0',
+  );
 
   function saveMeta() {
     const n = parseInt(metaIes, 10);
@@ -18,8 +21,14 @@ export default function Settings() {
       toast.error('Meta inválida. Informe um número maior que zero.');
       return;
     }
+    const v = parseFloat(valorMinimoIe);
+    if (isNaN(v) || v < 0) {
+      toast.error('Valor mínimo inválido.');
+      return;
+    }
     localStorage.setItem('meta_ies', String(n));
-    toast.success('Meta salva com sucesso.');
+    localStorage.setItem('valor_minimo_ie', String(v));
+    toast.success('Configurações salvas.');
   }
 
   return (
@@ -38,8 +47,8 @@ export default function Settings() {
             <p className="text-sm text-muted-foreground">
               Número de IEs Não-Consumidor Final distintas por trimestre exigidas pelo decreto para manter o incentivo fiscal.
             </p>
-            <div className="flex items-end gap-3">
-              <div className="space-y-1.5 flex-1 max-w-45">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="space-y-1.5 max-w-45">
                 <Label htmlFor="meta-ies" className="text-sm">Meta de IEs por trimestre</Label>
                 <Input
                   id="meta-ies"
@@ -50,8 +59,24 @@ export default function Settings() {
                   className="font-mono"
                 />
               </div>
+              <div className="space-y-1.5 max-w-45">
+                <Label htmlFor="valor-minimo" className="text-sm">Valor mínimo por IE (R$)</Label>
+                <Input
+                  id="valor-minimo"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={valorMinimoIe}
+                  onChange={(e) => setValorMinimoIe(e.target.value)}
+                  className="font-mono"
+                  placeholder="0"
+                />
+              </div>
               <Button onClick={saveMeta}>Salvar</Button>
             </div>
+            <p className="text-xs text-muted-foreground">
+              O valor mínimo filtra IEs cuja maior nota (por IE) seja inferior ao valor configurado. 0 = sem filtro.
+            </p>
           </CardContent>
         </Card>
 
@@ -91,10 +116,7 @@ export default function Settings() {
               Apenas notas com os CFOPs abaixo e UF de destino = RJ são importadas.
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {[
-                '5101','5102','5103','5114','5115','5116','5117','5118','5119',
-                '5120','5122','5123','5401','5402','5403','5405',
-              ].map((c) => (
+              {['5102', '5403', '5405'].map((c) => (
                 <span
                   key={c}
                   className="rounded border px-2 py-0.5 text-xs font-mono bg-muted"

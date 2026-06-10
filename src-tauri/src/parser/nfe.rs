@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const CFOPS_VALIDOS: &[&str] = &[
-    "5101", "5102", "5103", "5114", "5115", "5116", "5117", "5118", "5119",
-    "5120", "5122", "5123", "5401", "5402", "5403", "5405",
-];
+const CFOPS_VALIDOS: &[&str] = &["5102", "5403", "5405"];
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NfeParsed {

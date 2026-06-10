@@ -181,9 +181,11 @@ function IeTable({
 
 function CompareView({
   lotes,
+  valorMinimoIe,
   onRowClick,
 }: {
   lotes: Lote[];
+  valorMinimoIe: number;
   onRowClick: (g: IeGroup) => void;
 }) {
   const [loteIdsA, setLoteIdsA] = useState<string[]>([]);
@@ -205,8 +207,8 @@ function CompareView({
     fetchNotasByLotes(loteIdsB).then(setNotasB).catch(console.error).finally(() => setLoadingB(false));
   }, [loteIdsB.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const groupsA = useMemo(() => buildIeGroups(notasA), [notasA]);
-  const groupsB = useMemo(() => buildIeGroups(notasB), [notasB]);
+  const groupsA = useMemo(() => buildIeGroups(notasA, valorMinimoIe), [notasA, valorMinimoIe]);
+  const groupsB = useMemo(() => buildIeGroups(notasB, valorMinimoIe), [notasB, valorMinimoIe]);
   const diff = useMemo(() => compareIeGroups(groupsA, groupsB), [groupsA, groupsB]);
 
   function toggleA(id: string) {
@@ -439,8 +441,9 @@ export default function Tabelao() {
       .finally(() => setLoading(false));
   }, [selectedLoteIds.join(','), compareMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── meta ─────────────────────────────────────────────────────────────────────
+  // ── meta & valor mínimo ──────────────────────────────────────────────────────
   const metaIes = parseInt(localStorage.getItem('meta_ies') ?? '600', 10);
+  const valorMinimoIe = parseFloat(localStorage.getItem('valor_minimo_ie') ?? '0');
 
   // ── filters & sort ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -461,7 +464,10 @@ export default function Tabelao() {
     });
   }, [notas, dateFrom, dateTo]);
 
-  const allGroups = useMemo(() => buildIeGroups(notasDateFiltered), [notasDateFiltered]);
+  const allGroups = useMemo(
+    () => buildIeGroups(notasDateFiltered, valorMinimoIe),
+    [notasDateFiltered, valorMinimoIe],
+  );
 
   const filteredGroups: IeGroup[] = useMemo(() => {
     let g = allGroups;
@@ -634,7 +640,7 @@ export default function Tabelao() {
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* ── compare mode ── */}
           {compareMode ? (
-            <CompareView lotes={doneLotes} onRowClick={openIeDetail} />
+            <CompareView lotes={doneLotes} valorMinimoIe={valorMinimoIe} onRowClick={openIeDetail} />
           ) : (
             <>
               {/* ── lote filter chips ── */}
