@@ -215,12 +215,15 @@ export function buildIeGroups(notas: NFe[]): IeGroup[] {
       cnpjDest: ns[0].cnpjDest,
       xNome: ns[0].xNome,
       municipio: ns[0].municipio,
+      ufEnd: ns[0].ufEnd ?? '',
       notas: ns,
       valorTotal: ns.reduce((s, n) => s + n.vNf, 0),
       chaveNfe1: top.chave,
       valorNfe1: top.vNf,
       isConsumidorFinal: ns.every((n) => n.indFinal),
       qtdNotas: ns.length,
+      dataEmissaoLatest: ns.reduce((max, n) => (n.dataEmissao > max ? n.dataEmissao : max), ''),
+      indFinalCount: ns.filter((n) => n.indFinal).length,
     });
   }
 

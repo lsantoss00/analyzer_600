@@ -71,12 +71,15 @@ export interface IeGroup {
   cnpjDest: string;
   xNome: string;
   municipio: string;
+  ufEnd: string;
   notas: NFe[];
   valorTotal: number;
   chaveNfe1: string; // chave of highest-value nota
   valorNfe1: number;
   isConsumidorFinal: boolean;
   qtdNotas: number;
+  dataEmissaoLatest: string; // most recent nota date for this IE (YYYY-MM-DD)
+  indFinalCount: number;     // count of notas with indFinal=true
 }
 
 // Monthly aggregate for Dashboard charts
