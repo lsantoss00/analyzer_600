@@ -49,15 +49,36 @@ const PIE_COLORS = ['#4f8ef7', '#334155'];
 export default function Dashboard() {
   const { data } = useAppData();
 
-  const allLotes = data.empresas.flatMap((e) =>
-    e.lotes.filter((l) => l.status === 'done'),
+  const empresasComLotes = data.empresas.filter((e) =>
+    e.lotes.some((l) => l.status === 'done'),
   );
 
-  const [selectedLoteId, setSelectedLoteId] = useState<string>(
-    data.loteAtivo ?? allLotes[0]?.id ?? '',
-  );
+  const initialEmpresaId =
+    data.empresaAtiva && empresasComLotes.some((e) => e.id === data.empresaAtiva)
+      ? data.empresaAtiva
+      : (empresasComLotes[0]?.id ?? '');
 
-  const lote = allLotes.find((l) => l.id === selectedLoteId);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState(initialEmpresaId);
+
+  const lotesEmpresa = empresasComLotes
+    .find((e) => e.id === selectedEmpresaId)
+    ?.lotes.filter((l) => l.status === 'done') ?? [];
+
+  const initialLoteId =
+    data.loteAtivo && lotesEmpresa.some((l) => l.id === data.loteAtivo)
+      ? data.loteAtivo
+      : (lotesEmpresa[0]?.id ?? '');
+
+  const [selectedLoteId, setSelectedLoteId] = useState(initialLoteId);
+
+  function handleEmpresaChange(id: string | null) {
+    if (!id) return;
+    setSelectedEmpresaId(id);
+    const lotes = empresasComLotes.find((e) => e.id === id)?.lotes.filter((l) => l.status === 'done') ?? [];
+    setSelectedLoteId(lotes[0]?.id ?? '');
+  }
+
+  const lote = lotesEmpresa.find((l) => l.id === selectedLoteId);
   const resumo = lote?.resumo;
 
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
@@ -76,12 +97,6 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, [selectedLoteId]);
 
-  useEffect(() => {
-    if (data.loteAtivo && allLotes.some((l) => l.id === data.loteAtivo)) {
-      setSelectedLoteId(data.loteAtivo);
-    }
-  }, [data.loteAtivo]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const pieData = resumo
     ? [
         { name: 'Não Cons. Final', value: resumo.iesNaoConsumidor },
@@ -98,31 +113,34 @@ export default function Dashboard() {
             <h1 className="text-xl font-bold">Dashboard</h1>
             <p className="text-sm text-muted-foreground">Análise do lote selecionado</p>
           </div>
-          <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? '')}>
-            <SelectTrigger className="w-56">
-              <SelectValue placeholder="Selecione um lote">
-                {selectedLoteId ? allLotes.find((l) => l.id === selectedLoteId)?.nome : undefined}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {data.empresas.map((empresa) => {
-                const doneLotes = empresa.lotes.filter((l) => l.status === 'done');
-                if (doneLotes.length === 0) return null;
-                return (
-                  <div key={empresa.id}>
-                    <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                      {empresa.nome}
-                    </div>
-                    {doneLotes.map((l) => (
-                      <SelectItem key={l.id} value={l.id} className="pl-5">
-                        {l.nome}
-                      </SelectItem>
-                    ))}
-                  </div>
-                );
-              })}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {empresasComLotes.length > 1 && (
+              <Select value={selectedEmpresaId} onValueChange={handleEmpresaChange}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Empresa">
+                    {empresasComLotes.find((e) => e.id === selectedEmpresaId)?.nome}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasComLotes.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? '')}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Selecione um lote">
+                  {lotesEmpresa.find((l) => l.id === selectedLoteId)?.nome}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {lotesEmpresa.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {!lote && (

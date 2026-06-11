@@ -14,6 +14,13 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/components/AppLayout';
@@ -403,13 +410,19 @@ function DiffSection({
 export default function Tabelao() {
   const { data } = useAppData();
 
-  const empresa = useMemo(
-    () =>
-      data.empresas.find((e) => e.id === data.empresaAtiva) ??
-      data.empresas.find((e) => e.lotes.some((l) => l.status === 'done')) ??
-      null,
-    [data.empresas, data.empresaAtiva],
+  const empresasComLotes = useMemo(
+    () => data.empresas.filter((e) => e.lotes.some((l) => l.status === 'done')),
+    [data.empresas],
   );
+
+  const initialEmpresaId =
+    data.empresaAtiva && empresasComLotes.some((e) => e.id === data.empresaAtiva)
+      ? data.empresaAtiva
+      : (empresasComLotes[0]?.id ?? '');
+
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState(initialEmpresaId);
+
+  const empresa = empresasComLotes.find((e) => e.id === selectedEmpresaId) ?? null;
 
   const doneLotes = useMemo(
     () => empresa?.lotes.filter((l) => l.status === 'done') ?? [],
@@ -427,6 +440,14 @@ export default function Tabelao() {
       setSelectedLoteIds(ids);
     }
   }, [empresa?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleEmpresaChange(id: string | null) {
+    if (!id) return;
+    setSelectedEmpresaId(id);
+    const lotes = empresasComLotes.find((e) => e.id === id)?.lotes.filter((l) => l.status === 'done') ?? [];
+    setSelectedLoteIds(lotes.map((l) => l.id));
+    setCompareMode(false);
+  }
 
   const [notas, setNotas] = useState<NFe[]>([]);
   const [loading, setLoading] = useState(false);
@@ -608,15 +629,23 @@ export default function Tabelao() {
     <AppLayout>
       <div className="flex flex-col h-full">
         {/* ── top bar ── */}
-        <div className="flex items-start justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
-          <div>
-            <h1 className="text-xl font-bold">Tabelão de IEs Distintas</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {empresa.nome}
-              {!compareMode && loteBreadcrumb && <> <span className="opacity-40">•</span> {loteBreadcrumb}</>}
-            </p>
-          </div>
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border shrink-0">
+          <h1 className="text-xl font-bold">Tabelão de IEs Distintas</h1>
           <div className="flex items-center gap-2">
+            {empresasComLotes.length > 1 && (
+              <Select value={selectedEmpresaId} onValueChange={handleEmpresaChange}>
+                <SelectTrigger className="w-44">
+                  <SelectValue>
+                    {empresa.nome}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {empresasComLotes.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button
               variant={compareMode ? 'default' : 'outline'}
               size="sm"
