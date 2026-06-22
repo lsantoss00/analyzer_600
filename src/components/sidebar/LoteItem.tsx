@@ -124,8 +124,9 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
           <DialogHeader><DialogTitle>Renomear Lote</DialogTitle></DialogHeader>
           <Input
             value={nome}
-            onChange={(e) => setNome(e.target.value)}
+            onChange={(e) => setNome(e.target.value.slice(0, 200))}
             onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
+            maxLength={200}
             className="mt-2"
           />
           <DialogFooter className="mt-4">

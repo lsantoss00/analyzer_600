@@ -1,7 +1,7 @@
 mod commands;
 mod parser;
 
-use commands::process::{process_lote, save_bytes, scan_folder};
+use commands::process::{process_lote, scan_folder};
 
 fn migrations() -> Vec<tauri_plugin_sql::Migration> {
     vec![tauri_plugin_sql::Migration {
@@ -81,7 +81,7 @@ pub fn run() {
                 .add_migrations("sqlite:analyzer.db", migrations())
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![scan_folder, process_lote, save_bytes])
+        .invoke_handler(tauri::generate_handler![scan_folder, process_lote])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

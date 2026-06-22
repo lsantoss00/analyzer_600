@@ -34,7 +34,16 @@ enum ParseResult {
     Skip,
 }
 
+const MAX_XML_BYTES: u64 = 50 * 1024 * 1024; // 50 MB
+
 fn parse_xml_file(path: &str) -> ParseResult {
+    // Rejeita arquivos acima do limite antes de carregá-los na memória
+    if let Ok(meta) = std::fs::metadata(path) {
+        if meta.len() > MAX_XML_BYTES {
+            return ParseResult::Skip;
+        }
+    }
+
     let xml = match std::fs::read_to_string(path) {
         Ok(s) => s,
         Err(_) => return ParseResult::Skip,
@@ -173,16 +182,32 @@ fn process_files_sync(
 pub fn scan_folder(path: String) -> Result<Vec<String>, String> {
     use walkdir::WalkDir;
 
-    let paths: Vec<String> = WalkDir::new(&path)
+    let base = std::path::Path::new(&path)
+        .canonicalize()
+        .map_err(|e| format!("Caminho inválido: {e}"))?;
+
+    if !base.is_dir() {
+        return Err("O caminho selecionado não é um diretório".to_string());
+    }
+
+    let paths: Vec<String> = WalkDir::new(&base)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.file_type().is_file()
-                && e.path()
-                    .extension()
-                    .map(|ext| ext.eq_ignore_ascii_case("xml"))
-                    .unwrap_or(false)
+            if !e.file_type().is_file() {
+                return false;
+            }
+            // Rejeita entradas cujo caminho real sai do diretório base (symlinks)
+            if let Ok(canonical) = e.path().canonicalize() {
+                if !canonical.starts_with(&base) {
+                    return false;
+                }
+            }
+            e.path()
+                .extension()
+                .map(|ext| ext.eq_ignore_ascii_case("xml"))
+                .unwrap_or(false)
         })
         .map(|e| e.path().to_string_lossy().to_string())
         .collect();
@@ -211,7 +236,3 @@ pub async fn process_lote(
     .map_err(|e| e.to_string())?
 }
 
-#[tauri::command]
-pub async fn save_bytes(path: String, bytes: Vec<u8>) -> Result<(), String> {
-    std::fs::write(&path, &bytes).map_err(|e| e.to_string())
-}

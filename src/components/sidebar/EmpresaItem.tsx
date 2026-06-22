@@ -279,8 +279,9 @@ export default function EmpresaItem({ empresa }: Props) {
                   <Label>Nome do lote *</Label>
                   <Input
                     value={loteNome}
-                    onChange={(e) => setLoteNome(e.target.value)}
+                    onChange={(e) => setLoteNome(e.target.value.slice(0, 200))}
                     onKeyDown={(e) => e.key === 'Enter' && handleProcess()}
+                    maxLength={200}
                     autoFocus
                   />
                 </div>

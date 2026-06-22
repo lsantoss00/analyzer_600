@@ -13,6 +13,12 @@
     "sql:allow-select",
     "sql:allow-close",
     "fs:allow-write-file",
-    "fs:allow-read-text-file"
+    "fs:allow-read-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        { "path": "$HOMEDIR/**" }
+      ]
+    }
   ]
 }
