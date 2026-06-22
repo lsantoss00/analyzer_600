@@ -1,5 +1,5 @@
 import { CheckCircle2, Clock, Loader2, Pencil, Trash2, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppData } from '@/contexts/AppDataContext';
@@ -33,6 +33,8 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [nome, setNome] = useState(lote.nome);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   async function handleEdit() {
     if (!nome.trim()) return;
@@ -48,14 +50,40 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm(`Excluir lote "${lote.nome}" e todas as suas notas?`)) return;
-    try {
-      await removeLote(lote.id);
-      toast.success('Lote removido');
-    } catch {
-      toast.error('Erro ao remover');
-    }
+  function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation();
+    setPendingDelete(true);
+
+    const tid = setTimeout(async () => {
+      try {
+        await removeLote(lote.id);
+      } catch {
+        toast.error('Erro ao remover lote');
+        setPendingDelete(false);
+      }
+    }, 5000);
+    deleteTimerRef.current = tid;
+
+    toast(`Lote "${lote.nome}" removido`, {
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          clearTimeout(tid);
+          deleteTimerRef.current = null;
+          setPendingDelete(false);
+        },
+      },
+      duration: 5000,
+    });
+  }
+
+  if (pendingDelete) {
+    return (
+      <div className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm opacity-40 select-none">
+        {statusIcon[lote.status]}
+        <span className="flex-1 truncate line-through">{lote.nome}</span>
+      </div>
+    );
   }
 
   return (
@@ -84,7 +112,7 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
             variant="ghost"
             size="icon"
             className="h-5 w-5 hover:text-destructive"
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={handleDelete}
           >
             <Trash2 className="h-3 w-3" />
           </Button>

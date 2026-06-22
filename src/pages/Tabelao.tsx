@@ -5,6 +5,8 @@ import {
   BarChart3,
   ChevronDown,
   ChevronUp,
+  Columns2,
+  Copy,
   FileSpreadsheet,
   FileText,
   ListFilter,
@@ -21,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/components/AppLayout';
 import { IeDetailSheet } from '@/components/IeDetailSheet';
@@ -110,18 +112,51 @@ function LoteChips({
   );
 }
 
+// ── Column definitions ─────────────────────────────────────────────────────────
+
+const COL_DEFS = [
+  { id: 'cnpj',       label: 'CNPJ',         default: true  },
+  { id: 'municipio',  label: 'Município',     default: true  },
+  { id: 'data',       label: 'Data',          default: true  },
+  { id: 'valorTotal', label: 'Valor Total',   default: true  },
+  { id: 'qtd',        label: 'Qtd NF',        default: true  },
+  { id: 'cf',         label: 'Cons. Final',   default: true  },
+  { id: 'indFinal',   label: 'Qt. indFinal',  default: false },
+  { id: 'uf',         label: 'UF',            default: false },
+] as const;
+
+type ColId = typeof COL_DEFS[number]['id'];
+
+const DEFAULT_COLS = new Set<ColId>(COL_DEFS.filter((c) => c.default).map((c) => c.id));
+
+function loadCols(): Set<ColId> {
+  try {
+    const saved = localStorage.getItem('tabelao_cols');
+    if (saved) return new Set(JSON.parse(saved) as ColId[]);
+  } catch {}
+  return new Set(DEFAULT_COLS);
+}
+
+function brl(v: number) {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 // ── IeTable ────────────────────────────────────────────────────────────────────
 
 function IeTable({
   groups,
   notas,
   loading,
+  visibleCols,
   onRowClick,
+  onCopy,
 }: {
   groups: IeGroup[];
   notas: NFe[];
   loading: boolean;
+  visibleCols: Set<ColId>;
   onRowClick: (g: IeGroup) => void;
+  onCopy: (text: string, label: string, e: React.MouseEvent) => void;
 }) {
   if (loading) {
     return (
@@ -132,25 +167,30 @@ function IeTable({
     );
   }
 
+  // IE + Nome always shown + toggleable cols
+  const colSpan = 2 + visibleCols.size;
+
   return (
     <div className="rounded-lg border border-border overflow-hidden">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>IE</TableHead>
-            <TableHead>CNPJ</TableHead>
             <TableHead>Nome</TableHead>
-            <TableHead>Município</TableHead>
-            <TableHead>Data Emissão</TableHead>
-            <TableHead>Cons. Final</TableHead>
-            <TableHead className="text-right">indFinal</TableHead>
-            <TableHead>UF</TableHead>
+            {visibleCols.has('cnpj')       && <TableHead>CNPJ</TableHead>}
+            {visibleCols.has('municipio')  && <TableHead>Município</TableHead>}
+            {visibleCols.has('data')       && <TableHead>Data</TableHead>}
+            {visibleCols.has('valorTotal') && <TableHead className="text-right">Valor Total</TableHead>}
+            {visibleCols.has('qtd')        && <TableHead className="text-right">Qtd NF</TableHead>}
+            {visibleCols.has('cf')         && <TableHead>Cons. Final</TableHead>}
+            {visibleCols.has('indFinal')   && <TableHead className="text-right">indFinal</TableHead>}
+            {visibleCols.has('uf')         && <TableHead>UF</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {groups.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={8} className="text-center text-muted-foreground py-12 text-sm">
+              <TableCell colSpan={colSpan} className="text-center text-muted-foreground py-12 text-sm">
                 {notas.length === 0 ? 'Nenhum lote selecionado.' : 'Nenhum resultado.'}
               </TableCell>
             </TableRow>
@@ -161,22 +201,58 @@ function IeTable({
                 className="cursor-pointer hover:bg-accent/50"
                 onClick={() => onRowClick(g)}
               >
-                <TableCell className="font-mono text-xs font-medium">{g.ie || '—'}</TableCell>
-                <TableCell className="font-mono text-xs">{formatCnpj(g.cnpjDest)}</TableCell>
+                <TableCell
+                  className="font-mono text-xs font-medium group/cell"
+                  onClick={(e) => onCopy(g.ie, 'IE', e)}
+                  title="Clique para copiar"
+                >
+                  <span className="flex items-center gap-1">
+                    {g.ie || '—'}
+                    <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                  </span>
+                </TableCell>
                 <TableCell className="max-w-48 truncate text-sm" title={g.xNome}>{g.xNome}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
-                </TableCell>
-                <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
-                <TableCell>
-                  {g.isConsumidorFinal ? (
-                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
-                  ) : (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
-                <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
+                {visibleCols.has('cnpj') && (
+                  <TableCell
+                    className="font-mono text-xs group/cell"
+                    onClick={(e) => onCopy(g.cnpjDest, 'CNPJ', e)}
+                    title="Clique para copiar"
+                  >
+                    <span className="flex items-center gap-1">
+                      {formatCnpj(g.cnpjDest)}
+                      <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                    </span>
+                  </TableCell>
+                )}
+                {visibleCols.has('municipio') && (
+                  <TableCell className="text-xs text-muted-foreground">
+                    {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
+                  </TableCell>
+                )}
+                {visibleCols.has('data') && (
+                  <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
+                )}
+                {visibleCols.has('valorTotal') && (
+                  <TableCell className="text-right text-xs font-mono">R$ {brl(g.valorTotal)}</TableCell>
+                )}
+                {visibleCols.has('qtd') && (
+                  <TableCell className="text-right text-xs font-mono">{g.qtdNotas}</TableCell>
+                )}
+                {visibleCols.has('cf') && (
+                  <TableCell>
+                    {g.isConsumidorFinal ? (
+                      <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
+                    )}
+                  </TableCell>
+                )}
+                {visibleCols.has('indFinal') && (
+                  <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
+                )}
+                {visibleCols.has('uf') && (
+                  <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
+                )}
               </TableRow>
             ))
           )}
@@ -468,6 +544,40 @@ export default function Tabelao() {
       .finally(() => setLoading(false));
   }, [selectedLoteIds.join(','), compareMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── column visibility ────────────────────────────────────────────────────────
+  const [visibleCols, setVisibleCols] = useState<Set<ColId>>(loadCols);
+
+  function toggleCol(id: ColId) {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem('tabelao_cols', JSON.stringify([...next]));
+      return next;
+    });
+  }
+
+  // ── copy to clipboard ────────────────────────────────────────────────────────
+  function copyToClipboard(text: string, label: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).catch(() => {});
+    toast.success(`${label} copiado`, { duration: 1500 });
+  }
+
+  // ── keyboard shortcut Ctrl+F → foca busca ────────────────────────────────────
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ── regras de negócio ───────────────────────────────────────────────────────
   // Loaded once per mount; user changes rules in Settings and returns to this page
   const rules = useMemo(() => loadRules(), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -486,6 +596,7 @@ export default function Tabelao() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [showCols, setShowCols] = useState(false);
   const [trimestreAno, setTrimestreAno] = useState(new Date().getFullYear());
 
   const TRIMESTRES = useMemo(() => [
@@ -802,8 +913,9 @@ export default function Tabelao() {
                     <div className="relative flex-1">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
                       <Input
+                        ref={searchRef}
                         className="pl-9"
-                        placeholder="Buscar por IE, CNPJ, Nome, Nº NF-e, Chave..."
+                        placeholder="Buscar por IE, CNPJ, Nome, Nº NF-e, Chave… (Ctrl+F)"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                       />
@@ -824,6 +936,14 @@ export default function Tabelao() {
                           {(cfFilter !== 'all' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0) + (valorMinimoIe > 0 ? 1 : 0)}
                         </Badge>
                       )}
+                    </Button>
+                    <Button
+                      variant={visibleCols.size !== DEFAULT_COLS.size ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setShowCols((v) => !v)}
+                      title="Configurar colunas visíveis"
+                    >
+                      <Columns2 className="h-3.5 w-3.5" />
                     </Button>
                     <span className="text-xs text-muted-foreground whitespace-nowrap">
                       {filteredGroups.length} de {allGroups.length}
@@ -940,6 +1060,42 @@ export default function Tabelao() {
                     </div>
                   )}
 
+                  {/* ── column visibility panel ── */}
+                  {showCols && (
+                    <div className="rounded-lg border border-border px-4 py-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Colunas visíveis</p>
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => {
+                            setVisibleCols(new Set(DEFAULT_COLS));
+                            localStorage.removeItem('tabelao_cols');
+                          }}
+                        >
+                          Restaurar padrão
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {COL_DEFS.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => toggleCol(c.id)}
+                            className={[
+                              'text-xs px-2.5 py-1 rounded border transition-colors',
+                              visibleCols.has(c.id)
+                                ? 'bg-primary/20 text-primary border-primary/40'
+                                : 'border-border text-muted-foreground hover:border-primary/50',
+                            ].join(' ')}
+                          >
+                            {c.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* ── table ── */}
                   <div className="rounded-lg border border-border overflow-hidden">
                     <Table>
@@ -948,23 +1104,23 @@ export default function Tabelao() {
                           <TableHead className="cursor-pointer select-none" onClick={() => handleSort('ie')}>
                             IE <SortIcon k="ie" />
                           </TableHead>
-                          <TableHead>CNPJ</TableHead>
                           <TableHead className="cursor-pointer select-none" onClick={() => handleSort('xNome')}>
                             Nome <SortIcon k="xNome" />
                           </TableHead>
-                          <TableHead>Município</TableHead>
-                          <TableHead className="cursor-pointer select-none" onClick={() => handleSort('dataEmissaoLatest')}>
-                            Data Emissão <SortIcon k="dataEmissaoLatest" />
-                          </TableHead>
-                          <TableHead>Cons. Final</TableHead>
-                          <TableHead className="text-right">indFinal</TableHead>
-                          <TableHead>UF</TableHead>
+                          {visibleCols.has('cnpj')       && <TableHead>CNPJ</TableHead>}
+                          {visibleCols.has('municipio')  && <TableHead>Município</TableHead>}
+                          {visibleCols.has('data')       && <TableHead className="cursor-pointer select-none" onClick={() => handleSort('dataEmissaoLatest')}>Data <SortIcon k="dataEmissaoLatest" /></TableHead>}
+                          {visibleCols.has('valorTotal') && <TableHead className="text-right cursor-pointer select-none" onClick={() => handleSort('valorTotal')}>Valor Total <SortIcon k="valorTotal" /></TableHead>}
+                          {visibleCols.has('qtd')        && <TableHead className="text-right">Qtd NF</TableHead>}
+                          {visibleCols.has('cf')         && <TableHead>Cons. Final</TableHead>}
+                          {visibleCols.has('indFinal')   && <TableHead className="text-right">indFinal</TableHead>}
+                          {visibleCols.has('uf')         && <TableHead>UF</TableHead>}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredGroups.length === 0 ? (
                           <TableRow>
-                            <TableCell colSpan={8} className="text-center text-muted-foreground py-12 text-sm">
+                            <TableCell colSpan={2 + visibleCols.size} className="text-center text-muted-foreground py-12 text-sm">
                               {notas.length === 0
                                 ? 'Nenhum lote selecionado.'
                                 : 'Nenhum resultado para os filtros aplicados.'}
@@ -977,22 +1133,58 @@ export default function Tabelao() {
                               className="cursor-pointer hover:bg-accent/50"
                               onClick={() => openIeDetail(g)}
                             >
-                              <TableCell className="font-mono text-xs font-medium">{g.ie || '—'}</TableCell>
-                              <TableCell className="font-mono text-xs">{formatCnpj(g.cnpjDest)}</TableCell>
+                              <TableCell
+                                className="font-mono text-xs font-medium group/cell"
+                                onClick={(e) => copyToClipboard(g.ie, 'IE', e)}
+                                title="Clique para copiar"
+                              >
+                                <span className="flex items-center gap-1">
+                                  {g.ie || '—'}
+                                  <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                                </span>
+                              </TableCell>
                               <TableCell className="max-w-48 truncate text-sm" title={g.xNome}>{g.xNome}</TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
-                              </TableCell>
-                              <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
-                              <TableCell>
-                                {g.isConsumidorFinal ? (
-                                  <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
-                              <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
+                              {visibleCols.has('cnpj') && (
+                                <TableCell
+                                  className="font-mono text-xs group/cell"
+                                  onClick={(e) => copyToClipboard(g.cnpjDest, 'CNPJ', e)}
+                                  title="Clique para copiar"
+                                >
+                                  <span className="flex items-center gap-1">
+                                    {formatCnpj(g.cnpjDest)}
+                                    <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                                  </span>
+                                </TableCell>
+                              )}
+                              {visibleCols.has('municipio') && (
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
+                                </TableCell>
+                              )}
+                              {visibleCols.has('data') && (
+                                <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
+                              )}
+                              {visibleCols.has('valorTotal') && (
+                                <TableCell className="text-right text-xs font-mono">R$ {brl(g.valorTotal)}</TableCell>
+                              )}
+                              {visibleCols.has('qtd') && (
+                                <TableCell className="text-right text-xs font-mono">{g.qtdNotas}</TableCell>
+                              )}
+                              {visibleCols.has('cf') && (
+                                <TableCell>
+                                  {g.isConsumidorFinal ? (
+                                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
+                                  )}
+                                </TableCell>
+                              )}
+                              {visibleCols.has('indFinal') && (
+                                <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
+                              )}
+                              {visibleCols.has('uf') && (
+                                <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
+                              )}
                             </TableRow>
                           ))
                         )}

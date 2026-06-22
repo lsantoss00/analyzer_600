@@ -45,6 +45,8 @@ export default function EmpresaItem({ empresa }: Props) {
   const [nome, setNome] = useState(empresa.nome);
   const [cnpj, setCnpj] = useState(empresa.cnpj);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(false);
+  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Import flow
   const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
@@ -77,14 +79,31 @@ export default function EmpresaItem({ empresa }: Props) {
     }
   }
 
-  async function handleDelete() {
-    if (!confirm(`Excluir "${empresa.nome}" e todos os seus lotes?`)) return;
-    try {
-      await removeEmpresa(empresa.id);
-      toast.success('Empresa removida');
-    } catch {
-      toast.error('Erro ao remover');
-    }
+  function handleDelete() {
+    setPendingDelete(true);
+
+    const tid = setTimeout(async () => {
+      try {
+        await removeEmpresa(empresa.id);
+      } catch {
+        toast.error('Erro ao remover empresa');
+        setPendingDelete(false);
+      }
+    }, 6000);
+    deleteTimerRef.current = tid;
+
+    toast(`Empresa "${empresa.nome}" removida`, {
+      description: `${empresa.lotes.length} lote(s) serão excluídos`,
+      action: {
+        label: 'Desfazer',
+        onClick: () => {
+          clearTimeout(tid);
+          deleteTimerRef.current = null;
+          setPendingDelete(false);
+        },
+      },
+      duration: 6000,
+    });
   }
 
   async function handlePickFolder() {
@@ -148,6 +167,17 @@ export default function EmpresaItem({ empresa }: Props) {
   }
 
   const pct = progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
+
+  if (pendingDelete) {
+    return (
+      <div ref={setNodeRef} style={style} className="mb-1 opacity-40 select-none">
+        <div className="flex items-center gap-1 rounded-md px-1 py-1">
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="flex-1 truncate text-sm font-medium line-through">{empresa.nome}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div ref={setNodeRef} style={style} className="mb-1">
