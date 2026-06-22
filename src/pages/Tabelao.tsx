@@ -464,7 +464,15 @@ export default function Tabelao() {
 
   // ── meta & valor mínimo ──────────────────────────────────────────────────────
   const metaIes = parseInt(localStorage.getItem('meta_ies') ?? '600', 10);
-  const valorMinimoIe = parseFloat(localStorage.getItem('valor_minimo_ie') ?? '0');
+  const [valorMinimoIe, setValorMinimoIe] = useState(
+    () => parseFloat(localStorage.getItem('valor_minimo_ie') ?? '0'),
+  );
+
+  function handleValorMinimoChange(v: string) {
+    const n = parseFloat(v) || 0;
+    setValorMinimoIe(n);
+    localStorage.setItem('valor_minimo_ie', String(n));
+  }
 
   // ── filters & sort ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
@@ -781,9 +789,9 @@ export default function Tabelao() {
                       onClick={() => setShowFilters((v) => !v)}
                     >
                       <ListFilter className="h-3.5 w-3.5 mr-1.5" /> Filtros
-                      {(cfFilter !== 'all' || dateFrom || dateTo) && (
+                      {(cfFilter !== 'all' || dateFrom || dateTo || valorMinimoIe > 0) && (
                         <Badge className="ml-1.5 h-4 w-4 p-0 text-[10px] flex items-center justify-center">
-                          {(cfFilter !== 'all' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0)}
+                          {(cfFilter !== 'all' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0) + (valorMinimoIe > 0 ? 1 : 0)}
                         </Badge>
                       )}
                     </Button>
@@ -813,6 +821,29 @@ export default function Tabelao() {
                               ? `${notas.length - notasDateFiltered.length} notas filtradas por data`
                               : 'Todas as notas no período'}
                           </span>
+                        )}
+                      </div>
+
+                      {/* Valor mínimo */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xs text-muted-foreground font-medium w-24 shrink-0">Valor mín. (R$):</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={1}
+                          value={valorMinimoIe || ''}
+                          placeholder="0 = sem filtro"
+                          onChange={(e) => handleValorMinimoChange(e.target.value)}
+                          className="w-36 text-xs h-8 font-mono"
+                        />
+                        {valorMinimoIe > 0 && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                            onClick={() => handleValorMinimoChange('0')}
+                          >
+                            <X className="h-3 w-3" /> limpar
+                          </button>
                         )}
                       </div>
 

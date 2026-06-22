@@ -46,14 +46,36 @@ function sheetIes(groups: IeGroup[]): XLSX.WorkSheet {
   return XLSX.utils.json_to_sheet(rows);
 }
 
+function sheetIesNcf(groups: IeGroup[]): XLSX.WorkSheet {
+  const rows = groups
+    .filter((g) => !g.isConsumidorFinal)
+    .map((g) => ({
+      'IE': g.ie,
+      'CNPJ': g.cnpjDest,
+      'Nome': g.xNome,
+      'Município': g.municipio,
+      'UF': g.ufEnd,
+      'Chave NF-e (maior valor)': g.chaveNfe1,
+      'Valor da Nota (R$)': g.valorNfe1,
+      'Valor Total (R$)': g.valorTotal,
+      'Qtd Notas': g.qtdNotas,
+    }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 5 },
+    { wch: 46 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
+  ];
+  return ws;
+}
+
 export function generateExcelBytes(notas: NFe[]): Uint8Array {
   const groups = buildIeGroups(notas);
   const wb = XLSX.utils.book_new();
 
   const wsNotas = sheetNotas(notas);
   const wsIes = sheetIes(groups);
+  const wsNcf = sheetIesNcf(groups);
 
-  // Column widths
   wsNotas['!cols'] = [
     { wch: 46 }, { wch: 12 }, { wch: 6 }, { wch: 18 }, { wch: 18 },
     { wch: 30 }, { wch: 20 }, { wch: 4 }, { wch: 10 }, { wch: 10 },
@@ -65,6 +87,7 @@ export function generateExcelBytes(notas: NFe[]): Uint8Array {
     { wch: 46 }, { wch: 16 }, { wch: 60 }, { wch: 16 }, { wch: 12 }, { wch: 10 },
   ];
 
+  XLSX.utils.book_append_sheet(wb, wsNcf, 'IEs Elegíveis (NCF)');
   XLSX.utils.book_append_sheet(wb, wsNotas, 'Lista de Notas');
   XLSX.utils.book_append_sheet(wb, wsIes, 'IEs Distintas');
 

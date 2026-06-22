@@ -306,6 +306,19 @@ export function buildMesGroups(notas: NFe[]): MesGroup[] {
 }
 
 // ---------------------------------------------------------------------------
+// Reprocessing
+// ---------------------------------------------------------------------------
+
+export async function resetLote(id: string): Promise<void> {
+  const d = await db();
+  await d.execute('DELETE FROM notas WHERE lote_id=$1', [id]);
+  await d.execute(
+    "UPDATE lotes SET status='pending', total_arquivos=0, total_valido=0, resumo=NULL WHERE id=$1",
+    [id],
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Preferences
 // ---------------------------------------------------------------------------
 

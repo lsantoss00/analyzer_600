@@ -14,11 +14,12 @@ import {
 import { BarChart3, DollarSign, Loader2, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
+import { MetaProgress } from '@/components/MetaProgress';
 import StatCard from '@/components/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppData } from '@/contexts/AppDataContext';
-import { buildIeGroups, fetchMonthStats, fetchNotas } from '@/lib/db';
-import type { IeGroup, MonthStat } from '@/lib/types';
+import { buildIeGroups, buildMesGroups, fetchNotasByLotes } from '@/lib/db';
+import type { IeGroup, MonthStat, NFe, Resumo } from '@/lib/types';
 import {
   Select,
   SelectContent,
@@ -31,7 +32,6 @@ function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Recharts tooltip styled for dark theme
 const tooltipStyle = {
   contentStyle: {
     background: 'oklch(0.21 0.028 254)',
@@ -45,6 +45,8 @@ const tooltipStyle = {
 };
 
 const PIE_COLORS = ['#4f8ef7', '#334155'];
+
+const ALL_LOTES = '__all__';
 
 export default function Dashboard() {
   const { data } = useAppData();
@@ -64,38 +66,56 @@ export default function Dashboard() {
     .find((e) => e.id === selectedEmpresaId)
     ?.lotes.filter((l) => l.status === 'done') ?? [];
 
-  const initialLoteId =
-    data.loteAtivo && lotesEmpresa.some((l) => l.id === data.loteAtivo)
-      ? data.loteAtivo
-      : (lotesEmpresa[0]?.id ?? '');
-
-  const [selectedLoteId, setSelectedLoteId] = useState(initialLoteId);
+  const [selectedLoteId, setSelectedLoteId] = useState(ALL_LOTES);
 
   function handleEmpresaChange(id: string | null) {
     if (!id) return;
     setSelectedEmpresaId(id);
-    const lotes = empresasComLotes.find((e) => e.id === id)?.lotes.filter((l) => l.status === 'done') ?? [];
-    setSelectedLoteId(lotes[0]?.id ?? '');
+    setSelectedLoteId(ALL_LOTES);
   }
 
-  const lote = lotesEmpresa.find((l) => l.id === selectedLoteId);
-  const resumo = lote?.resumo;
-
+  const [resumo, setResumo] = useState<Resumo | null>(null);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
   const [ieGroups, setIeGroups] = useState<IeGroup[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const metaIes = parseInt(localStorage.getItem('meta_ies') ?? '600', 10);
+
   useEffect(() => {
-    if (!selectedLoteId) return;
+    if (lotesEmpresa.length === 0) {
+      setResumo(null); setMonthStats([]); setIeGroups([]);
+      return;
+    }
+    const ids = selectedLoteId === ALL_LOTES
+      ? lotesEmpresa.map((l) => l.id)
+      : [selectedLoteId];
+
     setLoading(true);
-    Promise.all([fetchNotas(selectedLoteId), fetchMonthStats(selectedLoteId)])
-      .then(([ns, ms]) => {
-        setMonthStats(ms);
-        setIeGroups(buildIeGroups(ns).slice(0, 10));
+    fetchNotasByLotes(ids)
+      .then((ns: NFe[]) => {
+        const groups = buildIeGroups(ns);
+        const validNotas = groups.flatMap((g) => g.notas);
+        const mesGroups = buildMesGroups(validNotas);
+
+        setIeGroups(groups.slice(0, 10));
+        setMonthStats(
+          mesGroups.map((g) => ({
+            mes: g.label,
+            valor: g.resumo.valorTotal,
+            notas: g.resumo.notasTotais,
+          })),
+        );
+        setResumo({
+          notasTotais: validNotas.length,
+          iesTotal: groups.length,
+          iesConsumidorFinal: groups.filter((g) => g.isConsumidorFinal).length,
+          iesNaoConsumidor: groups.filter((g) => !g.isConsumidorFinal).length,
+          valorTotal: validNotas.reduce((s, n) => s + n.vNf, 0),
+        });
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [selectedLoteId]);
+  }, [selectedLoteId, selectedEmpresaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pieData = resumo
     ? [
@@ -104,6 +124,10 @@ export default function Dashboard() {
       ]
     : [];
 
+  const loteLabel = selectedLoteId === ALL_LOTES
+    ? 'Todos os lotes'
+    : lotesEmpresa.find((l) => l.id === selectedLoteId)?.nome ?? '';
+
   return (
     <AppLayout>
       <div className="flex flex-col h-full overflow-hidden p-5 gap-4">
@@ -111,13 +135,13 @@ export default function Dashboard() {
         <div className="flex items-center justify-between shrink-0">
           <div>
             <h1 className="text-xl font-bold">Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Análise do lote selecionado</p>
+            <p className="text-sm text-muted-foreground">{loteLabel}</p>
           </div>
           <div className="flex items-center gap-2">
             {empresasComLotes.length > 1 && (
               <Select value={selectedEmpresaId} onValueChange={handleEmpresaChange}>
                 <SelectTrigger className="w-44">
-                  <SelectValue placeholder="Empresa">
+                  <SelectValue>
                     {empresasComLotes.find((e) => e.id === selectedEmpresaId)?.nome}
                   </SelectValue>
                 </SelectTrigger>
@@ -128,13 +152,14 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? '')}>
+            <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? ALL_LOTES)}>
               <SelectTrigger className="w-48">
-                <SelectValue placeholder="Selecione um lote">
-                  {lotesEmpresa.find((l) => l.id === selectedLoteId)?.nome}
-                </SelectValue>
+                <SelectValue>{loteLabel}</SelectValue>
               </SelectTrigger>
               <SelectContent>
+                {lotesEmpresa.length > 1 && (
+                  <SelectItem value={ALL_LOTES}>Todos os lotes</SelectItem>
+                )}
                 {lotesEmpresa.map((l) => (
                   <SelectItem key={l.id} value={l.id}>{l.nome}</SelectItem>
                 ))}
@@ -143,21 +168,26 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {!lote && (
+        {lotesEmpresa.length === 0 && (
           <div className="flex justify-center items-center flex-1 text-muted-foreground text-sm">
             Nenhum lote processado. Importe XMLs primeiro.
           </div>
         )}
 
-        {lote && loading && (
+        {lotesEmpresa.length > 0 && loading && (
           <div className="flex items-center gap-2 justify-center flex-1 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Carregando dados...</span>
           </div>
         )}
 
-        {lote && !loading && resumo && (
+        {lotesEmpresa.length > 0 && !loading && resumo && (
           <>
+            {/* Meta progress — só mostra quando vendo todos os lotes */}
+            {selectedLoteId === ALL_LOTES && (
+              <MetaProgress count={resumo.iesNaoConsumidor} meta={metaIes} />
+            )}
+
             {/* KPI row */}
             <div className="grid grid-cols-4 gap-3 shrink-0">
               <StatCard
@@ -172,9 +202,9 @@ export default function Dashboard() {
                 icon={Users}
               />
               <StatCard
-                label="IEs Cons. Final"
-                value={resumo.iesConsumidorFinal.toLocaleString('pt-BR')}
-                sub={`${resumo.iesTotal > 0 ? Math.round((resumo.iesConsumidorFinal / resumo.iesTotal) * 100) : 0}% do total`}
+                label="IEs Não Cons. Final"
+                value={resumo.iesNaoConsumidor.toLocaleString('pt-BR')}
+                sub={`${resumo.iesTotal > 0 ? Math.round((resumo.iesNaoConsumidor / resumo.iesTotal) * 100) : 0}% do total`}
                 icon={Users}
                 accent="green"
               />
@@ -186,7 +216,7 @@ export default function Dashboard() {
               />
             </div>
 
-            {/* Charts row — fills remaining height */}
+            {/* Charts row */}
             <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
               {/* Donut */}
               <Card className="flex flex-col overflow-hidden">
@@ -225,7 +255,7 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
 
-              {/* Monthly bar — 2 cols */}
+              {/* Monthly bar */}
               <Card className="col-span-2 flex flex-col overflow-hidden">
                 <CardHeader className="pb-1 shrink-0">
                   <CardTitle className="text-sm font-medium">Valor por Mês (R$)</CardTitle>
@@ -252,7 +282,7 @@ export default function Dashboard() {
               </Card>
             </div>
 
-            {/* IE ranking — fixed portion */}
+            {/* IE ranking */}
             <Card className="shrink-0" style={{ height: '220px' }}>
               <CardHeader className="pb-1">
                 <CardTitle className="text-sm font-medium">Top 10 IEs por Valor</CardTitle>
