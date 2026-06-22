@@ -486,6 +486,25 @@ export default function Tabelao() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [trimestreAno, setTrimestreAno] = useState(new Date().getFullYear());
+
+  const TRIMESTRES = useMemo(() => [
+    { label: 'T1', from: `${trimestreAno}-01-01`, to: `${trimestreAno}-03-31` },
+    { label: 'T2', from: `${trimestreAno}-04-01`, to: `${trimestreAno}-06-30` },
+    { label: 'T3', from: `${trimestreAno}-07-01`, to: `${trimestreAno}-09-30` },
+    { label: 'T4', from: `${trimestreAno}-10-01`, to: `${trimestreAno}-12-31` },
+  ], [trimestreAno]);
+
+  function handleTrimestre(idx: number) {
+    const t = TRIMESTRES[idx];
+    if (dateFrom === t.from && dateTo === t.to) {
+      setDateFrom(''); setDateTo('');
+    } else {
+      setDateFrom(t.from); setDateTo(t.to);
+    }
+  }
+
+  const activeTrimestre = TRIMESTRES.findIndex((t) => dateFrom === t.from && dateTo === t.to);
   const [sortKey, setSortKey] = useState<SortKey>('valorTotal');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
@@ -814,13 +833,53 @@ export default function Tabelao() {
                   {/* ── expanded filter panel ── */}
                   {showFilters && (
                     <div className="rounded-lg border border-border px-4 py-3 space-y-3">
+                      {/* Atalhos de trimestre */}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xs text-muted-foreground font-medium w-24 shrink-0">Trimestre:</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent text-xs"
+                            onClick={() => setTrimestreAno((y) => y - 1)}
+                          >‹</button>
+                          <span className="text-xs font-mono w-10 text-center">{trimestreAno}</span>
+                          <button
+                            type="button"
+                            className="h-6 w-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent text-xs"
+                            onClick={() => setTrimestreAno((y) => y + 1)}
+                          >›</button>
+                        </div>
+                        <div className="flex gap-1.5">
+                          {TRIMESTRES.map((t, i) => (
+                            <button
+                              key={t.label}
+                              type="button"
+                              onClick={() => handleTrimestre(i)}
+                              className={[
+                                'text-xs px-2.5 py-1 rounded border transition-colors font-mono',
+                                activeTrimestre === i
+                                  ? 'bg-primary text-primary-foreground border-primary'
+                                  : 'border-border text-muted-foreground hover:border-primary/50',
+                              ].join(' ')}
+                            >
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                        {activeTrimestre >= 0 && (
+                          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1" onClick={() => { setDateFrom(''); setDateTo(''); }}>
+                            <X className="h-3 w-3" /> limpar
+                          </button>
+                        )}
+                      </div>
+
                       <div className="flex flex-wrap items-center gap-3">
                         <span className="text-xs text-muted-foreground font-medium w-24 shrink-0">Período:</span>
                         <div className="flex items-center gap-2">
                           <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-36 text-xs h-8" />
                           <span className="text-xs text-muted-foreground">até</span>
                           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-36 text-xs h-8" />
-                          {(dateFrom || dateTo) && (
+                          {(dateFrom || dateTo) && activeTrimestre < 0 && (
                             <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1" onClick={() => { setDateFrom(''); setDateTo(''); }}>
                               <X className="h-3 w-3" /> limpar
                             </button>

@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
@@ -21,10 +21,91 @@ import { Progress } from '@/components/ui/progress';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, fetchNotas, resetLote } from '@/lib/db';
 import { applyNotaRules, loadRules } from '@/lib/rules';
+import type { BusinessRules } from '@/lib/rules';
 import type { NFe, Resumo } from '@/lib/types';
 
 function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── DiscardedSection ───────────────────────────────────────────────────────────
+
+function DiscardedSection({ all, filtered, rules }: { all: NFe[]; filtered: NFe[]; rules: BusinessRules }) {
+  const [open, setOpen] = useState(false);
+
+  const cfopSet = new Set(rules.cfops);
+  const ufSet = new Set(rules.ufs.map((u) => u.toUpperCase()));
+
+  const rejected = all.filter((n) => !cfopSet.has(n.cfop) || !ufSet.has(n.ufDestino.toUpperCase()));
+  if (rejected.length === 0) return null;
+
+  const byCfop = rejected.filter((n) => !cfopSet.has(n.cfop) && ufSet.has(n.ufDestino.toUpperCase()));
+  const byUf   = rejected.filter((n) =>  cfopSet.has(n.cfop) && !ufSet.has(n.ufDestino.toUpperCase()));
+  const byBoth = rejected.filter((n) => !cfopSet.has(n.cfop) && !ufSet.has(n.ufDestino.toUpperCase()));
+
+  const distinctCfops = [...new Set(byCfop.concat(byBoth).map((n) => n.cfop))].sort();
+  const distinctUfs   = [...new Set(byUf.concat(byBoth).map((n) => n.ufDestino.toUpperCase()))].sort();
+
+  return (
+    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5">
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+          <span className="text-sm font-medium text-amber-300">
+            {rejected.length.toLocaleString('pt-BR')} notas descartadas pelas regras atuais
+          </span>
+          <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs">
+            {Math.round((rejected.length / all.length) * 100)}% do total
+          </Badge>
+        </div>
+        {open
+          ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-3 border-t border-amber-500/10 pt-3">
+          <p className="text-xs text-muted-foreground">
+            Estas notas estão no banco mas não aparecem no Tabelão/Dashboard. Para alterar os critérios, vá em{' '}
+            <strong>Configurações → Regras de Negócio</strong>.
+          </p>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-md bg-muted/40 px-3 py-2">
+              <p className="text-lg font-bold text-amber-300">{byCfop.length.toLocaleString('pt-BR')}</p>
+              <p className="text-xs text-muted-foreground">CFOP fora das regras</p>
+              {distinctCfops.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {distinctCfops.map((c) => (
+                    <span key={c} className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{c}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-md bg-muted/40 px-3 py-2">
+              <p className="text-lg font-bold text-amber-300">{byUf.length.toLocaleString('pt-BR')}</p>
+              <p className="text-xs text-muted-foreground">UF fora das regras</p>
+              {distinctUfs.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {distinctUfs.map((u) => (
+                    <span key={u} className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded">{u}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-md bg-muted/40 px-3 py-2">
+              <p className="text-lg font-bold text-amber-300">{byBoth.length.toLocaleString('pt-BR')}</p>
+              <p className="text-xs text-muted-foreground">CFOP + UF inválidos</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function Import() {
@@ -37,11 +118,12 @@ export default function Import() {
   const [viewNotas, setViewNotas] = useState<NFe[]>([]);
   const [filteredNotas, setFilteredNotas] = useState<NFe[]>([]);
   const [filteredStats, setFilteredStats] = useState<Resumo | null>(null);
+  const [activeRules, setActiveRules] = useState<BusinessRules | null>(null);
   const [loadingNotas, setLoadingNotas] = useState(false);
 
   useEffect(() => {
     if (!activeLote || activeLote.status !== 'done') {
-      setViewNotas([]); setFilteredNotas([]); setFilteredStats(null);
+      setViewNotas([]); setFilteredNotas([]); setFilteredStats(null); setActiveRules(null);
       return;
     }
     setLoadingNotas(true);
@@ -52,6 +134,7 @@ export default function Import() {
         const groups = buildIeGroups(fNotas, rules.valorMinimoIe);
         setViewNotas(notas);
         setFilteredNotas(fNotas);
+        setActiveRules(rules);
         setFilteredStats({
           notasTotais: fNotas.length,
           iesTotal: groups.length,
@@ -197,7 +280,12 @@ export default function Import() {
                 <span>Carregando notas...</span>
               </div>
             ) : (
-              <MesAccordion notas={filteredNotas} />
+              <>
+                {activeRules && viewNotas.length > filteredNotas.length && (
+                  <DiscardedSection all={viewNotas} filtered={filteredNotas} rules={activeRules} />
+                )}
+                <MesAccordion notas={filteredNotas} />
+              </>
             )}
           </div>
         ) : activeLote && activeLote.status === 'processing' ? (
