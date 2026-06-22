@@ -40,6 +40,8 @@ import {
 } from '@/components/ui/table';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, compareIeGroups, fetchNotasByLotes } from '@/lib/db';
+import { applyNotaRules, loadRules } from '@/lib/rules';
+import type { BusinessRules } from '@/lib/rules';
 import { generateExcelBytes } from '@/lib/excelExport';
 import { generatePdfBytes } from '@/lib/pdfExport';
 import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
@@ -189,10 +191,12 @@ function IeTable({
 function CompareView({
   lotes,
   valorMinimoIe,
+  rules,
   onRowClick,
 }: {
   lotes: Lote[];
   valorMinimoIe: number;
+  rules: BusinessRules;
   onRowClick: (g: IeGroup) => void;
 }) {
   const [loteIdsA, setLoteIdsA] = useState<string[]>([]);
@@ -214,8 +218,10 @@ function CompareView({
     fetchNotasByLotes(loteIdsB).then(setNotasB).catch(console.error).finally(() => setLoadingB(false));
   }, [loteIdsB.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const groupsA = useMemo(() => buildIeGroups(notasA, valorMinimoIe), [notasA, valorMinimoIe]);
-  const groupsB = useMemo(() => buildIeGroups(notasB, valorMinimoIe), [notasB, valorMinimoIe]);
+  const filteredA = useMemo(() => applyNotaRules(notasA, rules), [notasA]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredB = useMemo(() => applyNotaRules(notasB, rules), [notasB]); // eslint-disable-line react-hooks/exhaustive-deps
+  const groupsA = useMemo(() => buildIeGroups(filteredA, valorMinimoIe), [filteredA, valorMinimoIe]);
+  const groupsB = useMemo(() => buildIeGroups(filteredB, valorMinimoIe), [filteredB, valorMinimoIe]);
   const diff = useMemo(() => compareIeGroups(groupsA, groupsB), [groupsA, groupsB]);
 
   function toggleA(id: string) {
@@ -462,11 +468,11 @@ export default function Tabelao() {
       .finally(() => setLoading(false));
   }, [selectedLoteIds.join(','), compareMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── meta & valor mínimo ──────────────────────────────────────────────────────
-  const metaIes = parseInt(localStorage.getItem('meta_ies') ?? '600', 10);
-  const [valorMinimoIe, setValorMinimoIe] = useState(
-    () => parseFloat(localStorage.getItem('valor_minimo_ie') ?? '0'),
-  );
+  // ── regras de negócio ───────────────────────────────────────────────────────
+  // Loaded once per mount; user changes rules in Settings and returns to this page
+  const rules = useMemo(() => loadRules(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const metaIes = rules.metaIes;
+  const [valorMinimoIe, setValorMinimoIe] = useState(() => rules.valorMinimoIe);
 
   function handleValorMinimoChange(v: string) {
     const n = parseFloat(v) || 0;
@@ -493,9 +499,14 @@ export default function Tabelao() {
     });
   }, [notas, dateFrom, dateTo]);
 
+  const notasRuleFiltered = useMemo(
+    () => applyNotaRules(notasDateFiltered, rules),
+    [notasDateFiltered], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   const allGroups = useMemo(
-    () => buildIeGroups(notasDateFiltered, valorMinimoIe),
-    [notasDateFiltered, valorMinimoIe],
+    () => buildIeGroups(notasRuleFiltered, valorMinimoIe),
+    [notasRuleFiltered, valorMinimoIe],
   );
 
   const filteredGroups: IeGroup[] = useMemo(() => {
@@ -539,17 +550,17 @@ export default function Tabelao() {
 
   const cfopCounts = useMemo(() => {
     const map = new Map<string, number>();
-    for (const n of notasDateFiltered) map.set(n.cfop, (map.get(n.cfop) ?? 0) + 1);
+    for (const n of notasRuleFiltered) map.set(n.cfop, (map.get(n.cfop) ?? 0) + 1);
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [notasDateFiltered]);
+  }, [notasRuleFiltered]);
 
   const resumo: Resumo = useMemo(() => ({
-    notasTotais: notasDateFiltered.length,
+    notasTotais: notasRuleFiltered.length,
     iesTotal: allGroups.length,
     iesConsumidorFinal: allGroups.filter((g) => g.isConsumidorFinal).length,
     iesNaoConsumidor: allGroups.filter((g) => !g.isConsumidorFinal).length,
-    valorTotal: notasDateFiltered.reduce((s, n) => s + n.vNf, 0),
-  }), [notasDateFiltered, allGroups]);
+    valorTotal: notasRuleFiltered.reduce((s, n) => s + n.vNf, 0),
+  }), [notasRuleFiltered, allGroups]);
 
   // ── breadcrumb ──────────────────────────────────────────────────────────────
   const loteBreadcrumb =
@@ -677,7 +688,7 @@ export default function Tabelao() {
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* ── compare mode ── */}
           {compareMode ? (
-            <CompareView lotes={doneLotes} valorMinimoIe={valorMinimoIe} onRowClick={openIeDetail} />
+            <CompareView lotes={doneLotes} valorMinimoIe={valorMinimoIe} rules={rules} onRowClick={openIeDetail} />
           ) : (
             <>
               {/* ── lote filter chips ── */}

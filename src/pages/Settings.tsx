@@ -6,29 +6,58 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { DEFAULT_RULES, loadRules, saveRules } from '@/lib/rules';
 
 export default function Settings() {
-  const [metaIes, setMetaIes] = useState(
-    () => localStorage.getItem('meta_ies') ?? '600',
-  );
-  const [valorMinimoIe, setValorMinimoIe] = useState(
-    () => localStorage.getItem('valor_minimo_ie') ?? '0',
-  );
+  const initial = loadRules();
 
-  function saveMeta() {
-    const n = parseInt(metaIes, 10);
-    if (isNaN(n) || n <= 0) {
-      toast.error('Meta inválida. Informe um número maior que zero.');
+  const [ufs, setUfs] = useState(initial.ufs.join(', '));
+  const [cfops, setCfops] = useState(initial.cfops.join(', '));
+  const [metaIes, setMetaIes] = useState(String(initial.metaIes));
+  const [valorMinimoIe, setValorMinimoIe] = useState(String(initial.valorMinimoIe));
+
+  function restoreDefaults() {
+    setUfs(DEFAULT_RULES.ufs.join(', '));
+    setCfops(DEFAULT_RULES.cfops.join(', '));
+    setMetaIes(String(DEFAULT_RULES.metaIes));
+    setValorMinimoIe(String(DEFAULT_RULES.valorMinimoIe));
+  }
+
+  function saveAll() {
+    const parsedUfs = ufs.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
+    const parsedCfops = cfops.split(',').map((s) => s.trim()).filter(Boolean);
+    const parsedMeta = parseInt(metaIes, 10);
+    const parsedValor = parseFloat(valorMinimoIe);
+
+    if (parsedUfs.length === 0) {
+      toast.error('Informe pelo menos uma UF de destino.');
       return;
     }
-    const v = parseFloat(valorMinimoIe);
-    if (isNaN(v) || v < 0) {
+    if (parsedCfops.length === 0) {
+      toast.error('Informe pelo menos um CFOP válido.');
+      return;
+    }
+    if (isNaN(parsedMeta) || parsedMeta <= 0) {
+      toast.error('Meta de IEs inválida. Informe um número maior que zero.');
+      return;
+    }
+    if (isNaN(parsedValor) || parsedValor < 0) {
       toast.error('Valor mínimo inválido.');
       return;
     }
-    localStorage.setItem('meta_ies', String(n));
-    localStorage.setItem('valor_minimo_ie', String(v));
-    toast.success('Configurações salvas.');
+
+    saveRules({
+      ufs: parsedUfs,
+      cfops: parsedCfops,
+      metaIes: parsedMeta,
+      valorMinimoIe: parsedValor,
+    });
+
+    // Normalize display
+    setUfs(parsedUfs.join(', '));
+    setCfops(parsedCfops.join(', '));
+
+    toast.success('Regras salvas. Os filtros do Tabelão e Dashboard serão atualizados na próxima abertura.');
   }
 
   return (
@@ -36,20 +65,50 @@ export default function Settings() {
       <div className="p-6 space-y-6 max-w-2xl">
         <div>
           <h1 className="text-2xl font-bold">Configurações</h1>
-          <p className="text-sm text-muted-foreground mt-1">Preferências do aplicativo</p>
+          <p className="text-sm text-muted-foreground mt-1">Regras de negócio e preferências</p>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Meta — Decreto 9.025</CardTitle>
+            <CardTitle className="text-base">Regras de Negócio — Decreto 9.025</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <p className="text-sm text-muted-foreground">
-              Número de IEs Não-Consumidor Final distintas por trimestre exigidas pelo decreto para manter o incentivo fiscal.
+              Parâmetros que definem quais notas e IEs são elegíveis para o decreto.
+              Alterações se aplicam ao Tabelão e Dashboard (não requerem reimportação).
             </p>
-            <div className="flex items-end gap-3 flex-wrap">
-              <div className="space-y-1.5 max-w-45">
-                <Label htmlFor="meta-ies" className="text-sm">Meta de IEs por trimestre</Label>
+
+            {/* Row 1: UF + CFOP */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="regra-ufs">UF(s) de destino</Label>
+                <Input
+                  id="regra-ufs"
+                  value={ufs}
+                  onChange={(e) => setUfs(e.target.value)}
+                  placeholder="RJ"
+                  className="font-mono uppercase"
+                />
+                <p className="text-xs text-muted-foreground">Separadas por vírgula. Ex: <span className="font-mono">RJ, SP</span></p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="regra-cfops">CFOPs válidos</Label>
+                <Input
+                  id="regra-cfops"
+                  value={cfops}
+                  onChange={(e) => setCfops(e.target.value)}
+                  placeholder="5102, 5403, 5405"
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">Separados por vírgula</p>
+              </div>
+            </div>
+
+            {/* Row 2: Meta + Valor mínimo */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="meta-ies">Meta de IEs por trimestre</Label>
                 <Input
                   id="meta-ies"
                   type="number"
@@ -58,9 +117,11 @@ export default function Settings() {
                   onChange={(e) => setMetaIes(e.target.value)}
                   className="font-mono"
                 />
+                <p className="text-xs text-muted-foreground">IEs Não-CF distintas exigidas pelo decreto</p>
               </div>
-              <div className="space-y-1.5 max-w-45">
-                <Label htmlFor="valor-minimo" className="text-sm">Valor mínimo por IE (R$)</Label>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="valor-minimo">Valor mínimo por IE (R$)</Label>
                 <Input
                   id="valor-minimo"
                   type="number"
@@ -68,15 +129,18 @@ export default function Settings() {
                   step={0.01}
                   value={valorMinimoIe}
                   onChange={(e) => setValorMinimoIe(e.target.value)}
-                  className="font-mono"
                   placeholder="0"
+                  className="font-mono"
                 />
+                <p className="text-xs text-muted-foreground">Filtra IEs cuja maior nota seja inferior ao valor. 0 = sem filtro</p>
               </div>
-              <Button onClick={saveMeta}>Salvar</Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              O valor mínimo filtra IEs cuja maior nota (por IE) seja inferior ao valor configurado. 0 = sem filtro.
-            </p>
+
+            {/* Actions */}
+            <div className="flex items-center gap-2 pt-1">
+              <Button onClick={saveAll}>Salvar regras</Button>
+              <Button variant="outline" onClick={restoreDefaults}>Restaurar padrões</Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -98,32 +162,6 @@ export default function Settings() {
             <div className="flex justify-between">
               <span className="text-muted-foreground">Banco de dados</span>
               <span className="font-medium font-mono text-xs">SQLite local</span>
-            </div>
-            <Separator />
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Regras de negócio</span>
-              <span className="font-medium text-xs">UF=RJ · CFOPs específicos</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">CFOPs Aceitos</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xs text-muted-foreground mb-3">
-              Apenas notas com os CFOPs abaixo e UF de destino = RJ são importadas.
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {['5102', '5403', '5405'].map((c) => (
-                <span
-                  key={c}
-                  className="rounded border px-2 py-0.5 text-xs font-mono bg-muted"
-                >
-                  {c}
-                </span>
-              ))}
             </div>
           </CardContent>
         </Card>

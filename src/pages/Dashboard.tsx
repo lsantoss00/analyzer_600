@@ -19,6 +19,7 @@ import StatCard from '@/components/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, buildMesGroups, fetchNotasByLotes } from '@/lib/db';
+import { applyNotaRules, loadRules } from '@/lib/rules';
 import type { IeGroup, MonthStat, NFe, Resumo } from '@/lib/types';
 import {
   Select,
@@ -79,7 +80,8 @@ export default function Dashboard() {
   const [ieGroups, setIeGroups] = useState<IeGroup[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const metaIes = parseInt(localStorage.getItem('meta_ies') ?? '600', 10);
+  const rules = loadRules();
+  const metaIes = rules.metaIes;
 
   useEffect(() => {
     if (lotesEmpresa.length === 0) {
@@ -93,8 +95,9 @@ export default function Dashboard() {
     setLoading(true);
     fetchNotasByLotes(ids)
       .then((ns: NFe[]) => {
-        const groups = buildIeGroups(ns);
-        const validNotas = groups.flatMap((g) => g.notas);
+        const filtered = applyNotaRules(ns, rules);
+        const groups = buildIeGroups(filtered, rules.valorMinimoIe);
+        const validNotas = filtered;
         const mesGroups = buildMesGroups(validNotas);
 
         setIeGroups(groups.slice(0, 10));

@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { useAppData } from '@/contexts/AppDataContext';
-import { fetchNotas, resetLote } from '@/lib/db';
+import { buildIeGroups, fetchNotas, resetLote } from '@/lib/db';
+import { applyNotaRules, loadRules } from '@/lib/rules';
 import type { NFe, Resumo } from '@/lib/types';
 
 function brl(v: number) {
@@ -34,16 +35,31 @@ export default function Import() {
     .find((l) => l.id === data.loteAtivo);
 
   const [viewNotas, setViewNotas] = useState<NFe[]>([]);
+  const [filteredNotas, setFilteredNotas] = useState<NFe[]>([]);
+  const [filteredStats, setFilteredStats] = useState<Resumo | null>(null);
   const [loadingNotas, setLoadingNotas] = useState(false);
 
   useEffect(() => {
     if (!activeLote || activeLote.status !== 'done') {
-      setViewNotas([]);
+      setViewNotas([]); setFilteredNotas([]); setFilteredStats(null);
       return;
     }
     setLoadingNotas(true);
     fetchNotas(activeLote.id)
-      .then(setViewNotas)
+      .then((notas) => {
+        const rules = loadRules();
+        const fNotas = applyNotaRules(notas, rules);
+        const groups = buildIeGroups(fNotas, rules.valorMinimoIe);
+        setViewNotas(notas);
+        setFilteredNotas(fNotas);
+        setFilteredStats({
+          notasTotais: fNotas.length,
+          iesTotal: groups.length,
+          iesConsumidorFinal: groups.filter((g) => g.isConsumidorFinal).length,
+          iesNaoConsumidor: groups.filter((g) => !g.isConsumidorFinal).length,
+          valorTotal: fNotas.reduce((s, n) => s + n.vNf, 0),
+        });
+      })
       .catch(console.error)
       .finally(() => setLoadingNotas(false));
   }, [activeLote?.id, activeLote?.status]);
@@ -121,17 +137,22 @@ export default function Import() {
   return (
     <AppLayout>
       <div className="p-6 space-y-6">
-        {activeLote && activeLote.status === 'done' && activeLote.resumo ? (
+        {activeLote && activeLote.status === 'done' ? (
           <div className="space-y-4">
             <div className="flex items-center gap-2 flex-wrap">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
               <h2 className="text-lg font-semibold">{activeLote.nome}</h2>
               <Badge variant="outline" className="text-green-600">
-                {activeLote.totalValido.toLocaleString('pt-BR')} notas válidas
+                {activeLote.totalValido.toLocaleString('pt-BR')} no banco
               </Badge>
               <Badge variant="secondary">
                 de {activeLote.totalArquivos.toLocaleString('pt-BR')} arquivos
               </Badge>
+              {filteredStats && filteredStats.notasTotais !== activeLote.totalValido && (
+                <Badge variant="outline" className="text-blue-400 border-blue-400/30">
+                  {filteredStats.notasTotais.toLocaleString('pt-BR')} pelas regras atuais
+                </Badge>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -142,31 +163,33 @@ export default function Import() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard
-                label="Total de Notas"
-                value={activeLote.resumo.notasTotais.toLocaleString('pt-BR')}
-                icon={CheckCircle2}
-                accent="blue"
-              />
-              <StatCard
-                label="Total de IEs"
-                value={activeLote.resumo.iesTotal.toLocaleString('pt-BR')}
-                icon={CheckCircle2}
-              />
-              <StatCard
-                label="IEs Cons. Final"
-                value={activeLote.resumo.iesConsumidorFinal.toLocaleString('pt-BR')}
-                icon={CheckCircle2}
-                accent="green"
-              />
-              <StatCard
-                label="Valor Total"
-                value={`R$ ${brl(activeLote.resumo.valorTotal)}`}
-                icon={CheckCircle2}
-                accent="amber"
-              />
-            </div>
+            {filteredStats && (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <StatCard
+                  label="Notas elegíveis"
+                  value={filteredStats.notasTotais.toLocaleString('pt-BR')}
+                  icon={CheckCircle2}
+                  accent="blue"
+                />
+                <StatCard
+                  label="Total de IEs"
+                  value={filteredStats.iesTotal.toLocaleString('pt-BR')}
+                  icon={CheckCircle2}
+                />
+                <StatCard
+                  label="IEs Não-CF"
+                  value={filteredStats.iesNaoConsumidor.toLocaleString('pt-BR')}
+                  icon={CheckCircle2}
+                  accent="green"
+                />
+                <StatCard
+                  label="Valor Total"
+                  value={`R$ ${brl(filteredStats.valorTotal)}`}
+                  icon={CheckCircle2}
+                  accent="amber"
+                />
+              </div>
+            )}
 
             {loadingNotas ? (
               <div className="flex items-center gap-2 text-muted-foreground py-8 justify-center">
@@ -174,7 +197,7 @@ export default function Import() {
                 <span>Carregando notas...</span>
               </div>
             ) : (
-              <MesAccordion notas={viewNotas} />
+              <MesAccordion notas={filteredNotas} />
             )}
           </div>
         ) : activeLote && activeLote.status === 'processing' ? (

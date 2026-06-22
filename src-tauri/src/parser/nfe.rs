@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-const CFOPS_VALIDOS: &[&str] = &["5102", "5403", "5405"];
+// CFOP and UF filtering is handled on the frontend (configurable via Settings)
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NfeParsed {
@@ -134,11 +134,7 @@ pub fn parse_nfe(xml: &str) -> Option<NfeParsed> {
         .unwrap_or_default();
     let uf_end = uf_destino.clone();
 
-    // Collect ALL CFOPs across all <det> items.
-    // We validate each one; the stored value is the first (representative).
-    // A nota is only valid if its first CFOP is in CFOPS_VALIDOS —
-    // mixed-CFOP notas (e.g. 5101 + 9999) are a data-quality issue in the
-    // source; we keep the nota and store the primary CFOP for traceability.
+    // Store the primary CFOP (first <det> item). Frontend applies CFOP filter.
     let cfop = inf_nfe
         .descendants()
         .find(|n| n.is_element() && n.tag_name().name() == "CFOP")
@@ -186,7 +182,5 @@ pub fn parse_nfe(xml: &str) -> Option<NfeParsed> {
 }
 
 pub fn is_valid_nfe(nfe: &NfeParsed, cancelled: &std::collections::HashSet<String>) -> bool {
-    nfe.uf_destino.to_uppercase() == "RJ"
-        && CFOPS_VALIDOS.contains(&nfe.cfop.as_str())
-        && !cancelled.contains(&nfe.chave)
+    !cancelled.contains(&nfe.chave)
 }

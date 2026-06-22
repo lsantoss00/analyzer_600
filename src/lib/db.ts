@@ -198,14 +198,9 @@ function formatMesLabel(ym: string): string {
 // IE groups (used by Tabelão + Dashboard ranking)
 // ---------------------------------------------------------------------------
 
-export const CFOPS_VALIDOS = new Set(['5102', '5403', '5405']);
-
 export function buildIeGroups(notas: NFe[], valorMinimoIe = 0): IeGroup[] {
-  // Apply CFOP filter on the frontend too — handles lotes imported with the old 16-CFOP list
-  const validNotas = notas.filter((n) => CFOPS_VALIDOS.has(n.cfop));
-
   const map = new Map<string, NFe[]>();
-  for (const n of validNotas) {
+  for (const n of notas) {
     const key = n.ieDest || n.cnpjDest;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(n);
