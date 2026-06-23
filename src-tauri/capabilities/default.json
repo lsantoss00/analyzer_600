@@ -19,6 +19,7 @@
       "allow": [
         { "path": "$HOMEDIR/**" }
       ]
-    }
+    },
+    "notification:default"
   ]
 }

@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts';
-import { BarChart3, DollarSign, Loader2, Users } from 'lucide-react';
+import { AlertTriangle, BarChart3, DollarSign, Loader2, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { MetaProgress } from '@/components/MetaProgress';
@@ -78,6 +78,7 @@ export default function Dashboard() {
   const [resumo, setResumo] = useState<Resumo | null>(null);
   const [monthStats, setMonthStats] = useState<MonthStat[]>([]);
   const [ieGroups, setIeGroups] = useState<IeGroup[]>([]);
+  const [allIeGroups, setAllIeGroups] = useState<IeGroup[]>([]);
   const [loading, setLoading] = useState(false);
 
   const rules = loadRules();
@@ -100,6 +101,7 @@ export default function Dashboard() {
         const validNotas = filtered;
         const mesGroups = buildMesGroups(validNotas);
 
+        setAllIeGroups(groups);
         setIeGroups(groups.slice(0, 10));
         setMonthStats(
           mesGroups.map((g) => ({
@@ -284,6 +286,50 @@ export default function Dashboard() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Concentração de valor */}
+            {allIeGroups.length > 0 && (() => {
+              const totalVal = allIeGroups.reduce((s, g) => s + g.valorTotal, 0);
+              const sorted = [...allIeGroups].sort((a, b) => b.valorTotal - a.valorTotal);
+              const pct = (n: number) =>
+                totalVal > 0 ? Math.round(sorted.slice(0, n).reduce((s, g) => s + g.valorTotal, 0) / totalVal * 100) : 0;
+              const [p3, p5, p10] = [pct(3), pct(5), pct(10)];
+              const risk = p3 >= 60 ? 'high' : p5 >= 60 ? 'mid' : 'low';
+              return (
+                <Card className="shrink-0">
+                  <CardContent className="py-4 px-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <p className="text-sm font-medium">Concentração de Valor</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">% do valor total em X IEs</p>
+                      </div>
+                      {risk === 'high' && (
+                        <div className="flex items-center gap-1 text-amber-400 text-xs">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          <span>Concentrado</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {[['Top 3', p3], ['Top 5', p5], ['Top 10', p10]].map(([label, val]) => (
+                        <div key={label as string} className="space-y-1.5">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">{label as string}</span>
+                            <span className={`font-semibold tabular-nums ${(val as number) >= 70 ? 'text-amber-400' : 'text-foreground'}`}>{val as number}%</span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all ${(val as number) >= 70 ? 'bg-amber-400' : 'bg-primary'}`}
+                              style={{ width: `${val as number}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
             {/* IE ranking */}
             <Card className="shrink-0" style={{ height: '220px' }}>

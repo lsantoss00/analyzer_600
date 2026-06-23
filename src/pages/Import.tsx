@@ -20,6 +20,7 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, fetchNotas, resetLote } from '@/lib/db';
+import { notify } from '@/lib/notify';
 import { applyNotaRules, loadRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
 import type { NFe, Resumo } from '@/lib/types';
@@ -194,9 +195,9 @@ export default function Import() {
         xmlPaths: scanned,
       });
       await refresh();
-      toast.success(
-        `Reprocessado: ${resumo.notasTotais.toLocaleString('pt-BR')} notas válidas de ${scanned.length.toLocaleString('pt-BR')} arquivos`,
-      );
+      const rMsg = `${resumo.notasTotais.toLocaleString('pt-BR')} notas válidas de ${scanned.length.toLocaleString('pt-BR')} arquivos`;
+      toast.success(`Reprocessado: ${rMsg}`);
+      notify(`Lote "${activeLote.nome}" reprocessado`, rMsg);
     } catch (err) {
       toast.error(`Erro ao reprocessar: ${String(err)}`);
     } finally {

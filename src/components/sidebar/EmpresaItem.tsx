@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { notify } from '@/lib/notify';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Empresa, Resumo } from '@/lib/types';
 import { Button } from '../ui/button';
@@ -145,9 +146,9 @@ export default function EmpresaItem({ empresa }: Props) {
       const resumo: Resumo = await invoke('process_lote', { loteId, xmlPaths: scanned });
       await refresh();
       setLoteAtivo(loteId);
-      toast.success(
-        `Lote processado: ${resumo.notasTotais.toLocaleString('pt-BR')} notas válidas de ${scanned.length.toLocaleString('pt-BR')} arquivos`,
-      );
+      const msg = `${resumo.notasTotais.toLocaleString('pt-BR')} notas válidas de ${scanned.length.toLocaleString('pt-BR')} arquivos`;
+      toast.success(`Lote processado: ${msg}`);
+      notify(`Lote "${loteNome}" processado`, msg);
     } catch (err) {
       toast.error(`Erro ao processar: ${String(err)}`);
     } finally {

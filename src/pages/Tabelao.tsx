@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import AppLayout from '@/components/AppLayout';
@@ -756,6 +757,15 @@ export default function Tabelao() {
   const [selectedGroup, setSelectedGroup] = useState<IeGroup | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
 
+  // ── virtual table ────────────────────────────────────────────────────────────
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filteredGroups.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 36,
+    overscan: 15,
+  });
+
   function openIeDetail(g: IeGroup) {
     setSelectedGroup(g);
     setSheetOpen(true);
@@ -1096,10 +1106,14 @@ export default function Tabelao() {
                     </div>
                   )}
 
-                  {/* ── table ── */}
-                  <div className="rounded-lg border border-border overflow-hidden">
+                  {/* ── table (virtualized) ── */}
+                  <div
+                    ref={tableContainerRef}
+                    className="rounded-lg border border-border overflow-auto"
+                    style={{ height: 'calc(100vh - 420px)', minHeight: '280px' }}
+                  >
                     <Table>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 z-10 bg-background">
                         <TableRow>
                           <TableHead className="cursor-pointer select-none" onClick={() => handleSort('ie')}>
                             IE <SortIcon k="ie" />
@@ -1126,68 +1140,82 @@ export default function Tabelao() {
                                 : 'Nenhum resultado para os filtros aplicados.'}
                             </TableCell>
                           </TableRow>
-                        ) : (
-                          filteredGroups.map((g) => (
-                            <TableRow
-                              key={g.ie}
-                              className="cursor-pointer hover:bg-accent/50"
-                              onClick={() => openIeDetail(g)}
-                            >
-                              <TableCell
-                                className="font-mono text-xs font-medium group/cell"
-                                onClick={(e) => copyToClipboard(g.ie, 'IE', e)}
-                                title="Clique para copiar"
-                              >
-                                <span className="flex items-center gap-1">
-                                  {g.ie || '—'}
-                                  <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
-                                </span>
-                              </TableCell>
-                              <TableCell className="max-w-48 truncate text-sm" title={g.xNome}>{g.xNome}</TableCell>
-                              {visibleCols.has('cnpj') && (
-                                <TableCell
-                                  className="font-mono text-xs group/cell"
-                                  onClick={(e) => copyToClipboard(g.cnpjDest, 'CNPJ', e)}
-                                  title="Clique para copiar"
-                                >
-                                  <span className="flex items-center gap-1">
-                                    {formatCnpj(g.cnpjDest)}
-                                    <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
-                                  </span>
-                                </TableCell>
-                              )}
-                              {visibleCols.has('municipio') && (
-                                <TableCell className="text-xs text-muted-foreground">
-                                  {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
-                                </TableCell>
-                              )}
-                              {visibleCols.has('data') && (
-                                <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
-                              )}
-                              {visibleCols.has('valorTotal') && (
-                                <TableCell className="text-right text-xs font-mono">R$ {brl(g.valorTotal)}</TableCell>
-                              )}
-                              {visibleCols.has('qtd') && (
-                                <TableCell className="text-right text-xs font-mono">{g.qtdNotas}</TableCell>
-                              )}
-                              {visibleCols.has('cf') && (
-                                <TableCell>
-                                  {g.isConsumidorFinal ? (
-                                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
-                                  ) : (
-                                    <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
-                                  )}
-                                </TableCell>
-                              )}
-                              {visibleCols.has('indFinal') && (
-                                <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
-                              )}
-                              {visibleCols.has('uf') && (
-                                <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
-                              )}
-                            </TableRow>
-                          ))
-                        )}
+                        ) : (() => {
+                          const virtualItems = rowVirtualizer.getVirtualItems();
+                          const totalSize = rowVirtualizer.getTotalSize();
+                          const paddingTop = virtualItems[0]?.start ?? 0;
+                          const paddingBottom = totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0);
+                          return (
+                            <>
+                              {paddingTop > 0 && <tr style={{ height: paddingTop }}><td /></tr>}
+                              {virtualItems.map((vRow) => {
+                                const g = filteredGroups[vRow.index];
+                                return (
+                                  <TableRow
+                                    key={vRow.key}
+                                    data-index={vRow.index}
+                                    className="cursor-pointer hover:bg-accent/50"
+                                    onClick={() => openIeDetail(g)}
+                                  >
+                                    <TableCell
+                                      className="font-mono text-xs font-medium group/cell"
+                                      onClick={(e) => copyToClipboard(g.ie, 'IE', e)}
+                                      title="Clique para copiar"
+                                    >
+                                      <span className="flex items-center gap-1">
+                                        {g.ie || '—'}
+                                        <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="max-w-48 truncate text-sm" title={g.xNome}>{g.xNome}</TableCell>
+                                    {visibleCols.has('cnpj') && (
+                                      <TableCell
+                                        className="font-mono text-xs group/cell"
+                                        onClick={(e) => copyToClipboard(g.cnpjDest, 'CNPJ', e)}
+                                        title="Clique para copiar"
+                                      >
+                                        <span className="flex items-center gap-1">
+                                          {formatCnpj(g.cnpjDest)}
+                                          <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
+                                        </span>
+                                      </TableCell>
+                                    )}
+                                    {visibleCols.has('municipio') && (
+                                      <TableCell className="text-xs text-muted-foreground">
+                                        {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
+                                      </TableCell>
+                                    )}
+                                    {visibleCols.has('data') && (
+                                      <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
+                                    )}
+                                    {visibleCols.has('valorTotal') && (
+                                      <TableCell className="text-right text-xs font-mono">R$ {brl(g.valorTotal)}</TableCell>
+                                    )}
+                                    {visibleCols.has('qtd') && (
+                                      <TableCell className="text-right text-xs font-mono">{g.qtdNotas}</TableCell>
+                                    )}
+                                    {visibleCols.has('cf') && (
+                                      <TableCell>
+                                        {g.isConsumidorFinal ? (
+                                          <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
+                                        )}
+                                      </TableCell>
+                                    )}
+                                    {visibleCols.has('indFinal') && (
+                                      <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
+                                    )}
+                                    {visibleCols.has('uf') && (
+                                      <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
+                                    )}
+                                  </TableRow>
+                                );
+                              })}
+                              {paddingBottom > 0 && <tr style={{ height: paddingBottom }}><td /></tr>}
+                            </>
+                          );
+                        })()}
                       </TableBody>
                     </Table>
                   </div>
