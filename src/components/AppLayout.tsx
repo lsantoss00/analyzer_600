@@ -7,7 +7,9 @@ function OnboardingScreen() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-10 px-8 select-none">
       <div className="text-center space-y-2">
-        <img src="/icon.png" alt="logo" className="h-32 w-32 rounded-3xl object-cover mx-auto mb-6 drop-shadow-2xl" />
+        <div className="h-32 w-32 rounded-3xl bg-primary mx-auto mb-6 drop-shadow-2xl flex items-center justify-center overflow-hidden">
+          <img src="/icon.png" alt="logo" className="h-28 w-28 object-contain" />
+        </div>
         <h1 className="text-2xl font-bold">Bem-vindo ao Analisador NF-e</h1>
         <p className="text-muted-foreground text-sm max-w-md">
           Acompanhe o progresso rumo às 600 IEs distintas do Decreto 9.025 — RIOLOG.

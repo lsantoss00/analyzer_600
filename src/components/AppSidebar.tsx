@@ -83,7 +83,9 @@ export default function AppSidebar() {
     <aside className="flex h-screen w-64 flex-col border-r bg-sidebar text-sidebar-foreground shrink-0">
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-4 border-b">
-        <img src="/icon.png" alt="logo" className="h-12 w-12 rounded-xl object-cover shrink-0" />
+        <div className="h-12 w-12 rounded-xl bg-primary shrink-0 flex items-center justify-center overflow-hidden">
+          <img src="/icon.png" alt="logo" className="h-10 w-10 object-contain" />
+        </div>
         <div>
           <p className="text-sm font-semibold leading-tight">Analisador</p>
           <p className="text-xs text-muted-foreground">NF-e</p>
