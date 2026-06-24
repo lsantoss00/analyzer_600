@@ -17,8 +17,7 @@
         "height": 900,
         "minWidth": 1100,
         "minHeight": 700,
-        "center": true,
-        "icon": "icons/icon.ico"
+        "center": true
       }
     ],
     "security": {
