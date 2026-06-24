@@ -190,7 +190,7 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="flex flex-col h-full overflow-hidden p-5 gap-4">
+      <div className="h-full overflow-y-auto p-5 space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between shrink-0">
           <div>
@@ -229,13 +229,13 @@ export default function Dashboard() {
         </div>
 
         {lotesEmpresa.length === 0 && (
-          <div className="flex justify-center items-center flex-1 text-muted-foreground text-sm">
+          <div className="flex justify-center items-center py-32 text-muted-foreground text-sm">
             Nenhum lote processado. Importe XMLs primeiro.
           </div>
         )}
 
         {lotesEmpresa.length > 0 && loading && (
-          <div className="flex items-center gap-2 justify-center flex-1 text-muted-foreground">
+          <div className="flex items-center gap-2 justify-center py-32 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Carregando dados...</span>
           </div>
@@ -277,7 +277,7 @@ export default function Dashboard() {
             </div>
 
             {/* Charts row */}
-            <div className="grid grid-cols-3 gap-4 flex-1 min-h-0">
+            <div className="grid grid-cols-3 gap-4" style={{ height: '260px' }}>
               {/* Donut */}
               <Card className="flex flex-col overflow-hidden">
                 <CardHeader className="pb-1 shrink-0">
