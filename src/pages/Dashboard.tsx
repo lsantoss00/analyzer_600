@@ -11,7 +11,7 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts';
-import { AlertTriangle, BarChart3, DollarSign, Loader2, Users } from 'lucide-react';
+import { BarChart3, DollarSign, Loader2, TrendingUp, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { MetaProgress } from '@/components/MetaProgress';
@@ -31,6 +31,60 @@ import {
 
 function brl(v: number) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function brlK(v: number) {
+  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(0)}k`;
+  return `R$ ${brl(v)}`;
+}
+
+function ConcentracaoCard({ groups }: { groups: IeGroup[] }) {
+  const sorted = [...groups].sort((a, b) => b.valorTotal - a.valorTotal).slice(0, 8);
+  const totalVal = groups.reduce((s, g) => s + g.valorTotal, 0);
+  const top8Val = sorted.reduce((s, g) => s + g.valorTotal, 0);
+  const top8Pct = totalVal > 0 ? Math.round((top8Val / totalVal) * 100) : 0;
+  const maxVal = sorted[0]?.valorTotal ?? 1;
+
+  return (
+    <Card className="shrink-0">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium">Concentração de Valor</CardTitle>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <TrendingUp className="h-3.5 w-3.5" />
+            <span>Top 8 = <span className={`font-semibold ${top8Pct >= 70 ? 'text-amber-400' : 'text-foreground'}`}>{top8Pct}%</span> do total</span>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 pb-3">
+        <div className="space-y-2">
+          {sorted.map((g, i) => {
+            const pct = totalVal > 0 ? (g.valorTotal / totalVal) * 100 : 0;
+            const barWidth = maxVal > 0 ? (g.valorTotal / maxVal) * 100 : 0;
+            return (
+              <div key={g.ie || g.cnpjDest} className="grid items-center gap-x-3" style={{ gridTemplateColumns: '1rem 1fr auto auto' }}>
+                <span className="text-[10px] text-muted-foreground/60 tabular-nums text-right">{i + 1}</span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium truncate">{g.xNome || '—'}</span>
+                    {g.isConsumidorFinal && <span className="text-[9px] text-muted-foreground/50 shrink-0">CF</span>}
+                  </div>
+                  <div className="mt-0.5 h-1 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-primary/70" style={{ width: `${barWidth}%` }} />
+                  </div>
+                </div>
+                <span className="text-xs font-mono text-muted-foreground shrink-0">{brlK(g.valorTotal)}</span>
+                <span className={`text-xs font-semibold tabular-nums shrink-0 w-9 text-right ${pct >= 25 ? 'text-amber-400' : 'text-foreground'}`}>
+                  {pct < 1 ? '<1' : Math.round(pct)}%
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 const tooltipStyle = {
@@ -288,48 +342,7 @@ export default function Dashboard() {
             </div>
 
             {/* Concentração de valor */}
-            {allIeGroups.length > 0 && (() => {
-              const totalVal = allIeGroups.reduce((s, g) => s + g.valorTotal, 0);
-              const sorted = [...allIeGroups].sort((a, b) => b.valorTotal - a.valorTotal);
-              const pct = (n: number) =>
-                totalVal > 0 ? Math.round(sorted.slice(0, n).reduce((s, g) => s + g.valorTotal, 0) / totalVal * 100) : 0;
-              const [p3, p5, p10] = [pct(3), pct(5), pct(10)];
-              const risk = p3 >= 60 ? 'high' : p5 >= 60 ? 'mid' : 'low';
-              return (
-                <Card className="shrink-0">
-                  <CardContent className="py-4 px-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="text-sm font-medium">Concentração de Valor</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">% do valor total em X IEs</p>
-                      </div>
-                      {risk === 'high' && (
-                        <div className="flex items-center gap-1 text-amber-400 text-xs">
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          <span>Concentrado</span>
-                        </div>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[['Top 3', p3], ['Top 5', p5], ['Top 10', p10]].map(([label, val]) => (
-                        <div key={label as string} className="space-y-1.5">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-muted-foreground">{label as string}</span>
-                            <span className={`font-semibold tabular-nums ${(val as number) >= 70 ? 'text-amber-400' : 'text-foreground'}`}>{val as number}%</span>
-                          </div>
-                          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${(val as number) >= 70 ? 'bg-amber-400' : 'bg-primary'}`}
-                              style={{ width: `${val as number}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+            {allIeGroups.length > 0 && <ConcentracaoCard groups={allIeGroups} />}
 
             {/* IE ranking */}
             <Card className="shrink-0" style={{ height: '220px' }}>
