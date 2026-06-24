@@ -6,19 +6,6 @@ use commands::process::{process_lote, scan_folder};
 fn migrations() -> Vec<tauri_plugin_sql::Migration> {
     vec![
     tauri_plugin_sql::Migration {
-        version: 2,
-        description: "add_search_indexes",
-        sql: "
-            -- Composite index para filtro server-side por CFOP + UF (futuro)
-            CREATE INDEX IF NOT EXISTS idx_notas_lote_cfop_uf ON notas(lote_id, cfop, uf_destino);
-            -- Index para busca de texto por nome do destinatário
-            CREATE INDEX IF NOT EXISTS idx_notas_xnome ON notas(x_nome);
-            -- Index para busca por IE / CNPJ
-            CREATE INDEX IF NOT EXISTS idx_notas_ie_cnpj ON notas(ie_dest, cnpj_dest);
-        ",
-        kind: tauri_plugin_sql::MigrationKind::Up,
-    },
-    tauri_plugin_sql::Migration {
         version: 1,
         description: "create_schema",
         sql: "
@@ -79,6 +66,16 @@ fn migrations() -> Vec<tauri_plugin_sql::Migration> {
             );
 
             INSERT OR IGNORE INTO preferencias (id) VALUES (1);
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 2,
+        description: "add_search_indexes",
+        sql: "
+            CREATE INDEX IF NOT EXISTS idx_notas_lote_cfop_uf ON notas(lote_id, cfop, uf_destino);
+            CREATE INDEX IF NOT EXISTS idx_notas_xnome ON notas(x_nome);
+            CREATE INDEX IF NOT EXISTS idx_notas_ie_cnpj ON notas(ie_dest, cnpj_dest);
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
     }]
