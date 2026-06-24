@@ -63,7 +63,7 @@ function ConcentracaoCard({ groups }: { groups: IeGroup[] }) {
             const pct = totalVal > 0 ? (g.valorTotal / totalVal) * 100 : 0;
             const barWidth = maxVal > 0 ? (g.valorTotal / maxVal) * 100 : 0;
             return (
-              <div key={g.ie || g.cnpjDest} className="grid items-center gap-x-3" style={{ gridTemplateColumns: '1rem 1fr auto auto' }}>
+              <div key={g.ie || g.cnpjDest} className="grid items-center gap-x-3" style={{ gridTemplateColumns: '1rem 1fr auto auto auto' }}>
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums text-right">{i + 1}</span>
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
@@ -74,6 +74,7 @@ function ConcentracaoCard({ groups }: { groups: IeGroup[] }) {
                     <div className="h-full rounded-full bg-primary/70" style={{ width: `${barWidth}%` }} />
                   </div>
                 </div>
+                <span className="text-[11px] text-muted-foreground/60 shrink-0 tabular-nums">{g.qtdNotas} NF</span>
                 <span className="text-xs font-mono text-muted-foreground shrink-0">{brlK(g.valorTotal)}</span>
                 <span className={`text-xs font-semibold tabular-nums shrink-0 w-9 text-right ${pct >= 25 ? 'text-amber-400' : 'text-foreground'}`}>
                   {pct < 1 ? '<1' : Math.round(pct)}%
