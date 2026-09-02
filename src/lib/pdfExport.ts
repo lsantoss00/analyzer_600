@@ -1,13 +1,34 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { buildMesGroups } from './db';
-import type { NFe, Resumo } from './types';
+import type { IeGroup, NFe, Resumo } from './types';
+
+/**
+ * O que entra no PDF. 'kpis' é o relatório histórico (só indicadores);
+ * as outras duas incluem a tabela de IEs, que é o que sustenta a apuração.
+ */
+export type PdfMode = 'kpis' | 'todas' | 'elegiveis';
 
 function brl(v: number): string {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string, empresaNome: string): Uint8Array {
+function formatCnpj(v: string): string {
+  const d = (v ?? '').replace(/\D/g, '');
+  if (d.length !== 14) return v;
+  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+}
+
+export function generatePdfBytes(
+  notas: NFe[],
+  resumo: Resumo,
+  loteNome: string,
+  empresaNome: string,
+  mode: PdfMode = 'kpis',
+  // Já ordenados como na tela — o PDF não re-deriva os grupos, justamente para
+  // não discordar do que o usuário está vendo.
+  groups: IeGroup[] = [],
+): Uint8Array {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
   // Header
@@ -68,6 +89,49 @@ export function generatePdfBytes(notas: NFe[], resumo: Resumo, loteNome: string,
     },
     margin: { left: 14, right: 14 },
   });
+
+  if (mode !== 'kpis') {
+    const listados = mode === 'elegiveis' ? groups.filter((g) => !g.isConsumidorFinal) : groups;
+
+    const ieRows = listados.map((g) => [
+      g.ie || '—',
+      g.xNome,
+      formatCnpj(g.cnpjDest),
+      g.municipio + (g.ufEnd ? ' - ' + g.ufEnd : ''),
+      g.qtdNotas.toLocaleString('pt-BR'),
+      'R$ ' + brl(g.valorTotal),
+      g.isConsumidorFinal ? 'Sim' : 'Não',
+    ]);
+
+    const y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable?.finalY ?? 80;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(
+      mode === 'elegiveis'
+        ? `IEs elegíveis (não Consumidor Final) — ${listados.length}`
+        : `IEs distintas — ${listados.length}`,
+      14,
+      y + 12,
+    );
+
+    autoTable(doc, {
+      startY: y + 16,
+      head: [['IE', 'Nome', 'CNPJ', 'Município', 'Qtd NF', 'Valor Total', 'CF']],
+      body: ieRows,
+      theme: 'striped',
+      headStyles: { fillColor: [30, 64, 175] },
+      styles: { fontSize: 8, cellPadding: 1.5 },
+      columnStyles: {
+        0: { cellWidth: 26 },
+        2: { cellWidth: 34 },
+        4: { halign: 'right', cellWidth: 16 },
+        5: { halign: 'right', cellWidth: 28 },
+        6: { halign: 'center', cellWidth: 12 },
+      },
+      margin: { left: 14, right: 14 },
+    });
+  }
 
   return new Uint8Array(doc.output('arraybuffer') as ArrayBuffer);
 }

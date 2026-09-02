@@ -167,6 +167,28 @@ export async function fetchNotasByLotes(loteIds: string[]): Promise<NFe[]> {
   return rows.map(rowToNfe);
 }
 
+/**
+ * Todas as notas de uma IE nos lotes informados — usado pelo histórico da IE,
+ * que precisa enxergar todos os períodos da empresa, não só os selecionados.
+ *
+ * O OR com cnpj_dest é obrigatório: buildIeGroups agrupa por `ieDest || cnpjDest`,
+ * então grupos de notas sem IE têm um CNPJ como chave e um predicado apenas em
+ * ie_dest os perderia. Usa idx_notas_ie.
+ */
+export async function fetchNotasByIe(ieKey: string, loteIds: string[]): Promise<NFe[]> {
+  if (loteIds.length === 0 || !ieKey) return [];
+  const d = await db();
+  const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
+  const ieParam = `$${loteIds.length + 1}`;
+  const rows = await d.select<Row[]>(
+    `SELECT * FROM notas
+      WHERE lote_id IN (${placeholders})
+        AND (ie_dest = ${ieParam} OR (ie_dest = '' AND cnpj_dest = ${ieParam}))`,
+    [...loteIds, ieKey],
+  );
+  return rows.map(rowToNfe);
+}
+
 // ---------------------------------------------------------------------------
 // Aggregate queries (used by Dashboard)
 // ---------------------------------------------------------------------------

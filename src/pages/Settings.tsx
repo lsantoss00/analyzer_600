@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { DEFAULT_RULES, loadRules, saveRules } from '@/lib/rules';
+import { DEFAULT_RULES } from '@/lib/rules';
+import { useAppData } from '@/contexts/AppDataContext';
 
 export default function Settings() {
-  const initial = loadRules();
+  const { data, updateRules } = useAppData();
+  const initial = data.rules;
 
   const [ufs, setUfs] = useState(initial.ufs.join(', '));
   const [cfops, setCfops] = useState(initial.cfops.join(', '));
@@ -21,6 +23,10 @@ export default function Settings() {
     setCfops(DEFAULT_RULES.cfops.join(', '));
     setMetaIes(String(DEFAULT_RULES.metaIes));
     setValorMinimoIe(String(DEFAULT_RULES.valorMinimoIe));
+    // Antes isto só preenchia os inputs: quem clicava e navegava perdia a ação
+    // em silêncio, porque nada era persistido sem passar por "Salvar regras".
+    updateRules(DEFAULT_RULES);
+    toast.success('Regras restauradas para o padrão.');
   }
 
   function saveAll() {
@@ -46,7 +52,7 @@ export default function Settings() {
       return;
     }
 
-    saveRules({
+    updateRules({
       ufs: parsedUfs,
       cfops: parsedCfops,
       metaIes: parsedMeta,
@@ -57,7 +63,7 @@ export default function Settings() {
     setUfs(parsedUfs.join(', '));
     setCfops(parsedCfops.join(', '));
 
-    toast.success('Regras salvas. Os filtros do Tabelão e Dashboard serão atualizados na próxima abertura.');
+    toast.success('Regras salvas. Tabelão e Dashboard já estão usando os novos critérios.');
   }
 
   return (

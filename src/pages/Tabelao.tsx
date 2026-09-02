@@ -33,6 +33,12 @@ import { MetaProgress } from '@/components/MetaProgress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -44,11 +50,11 @@ import {
 } from '@/components/ui/table';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, compareIeGroups, fetchNotasByLotes } from '@/lib/db';
-import { applyNotaRules, loadRules } from '@/lib/rules';
+import { applyNotaRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
 import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
-import { generateExcelBytes } from '@/lib/excelExport';
-import { generatePdfBytes } from '@/lib/pdfExport';
+import { generateCompareExcelBytes, generateExcelBytes } from '@/lib/excelExport';
+import { generatePdfBytes, type PdfMode } from '@/lib/pdfExport';
 import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -278,7 +284,7 @@ function CompareView({
   lotes: Lote[];
   valorMinimoIe: number;
   rules: BusinessRules;
-  onRowClick: (g: IeGroup) => void;
+  onRowClick: (g: IeGroup, origem: string) => void;
 }) {
   const [loteIdsA, setLoteIdsA] = useState<string[]>([]);
   const [loteIdsB, setLoteIdsB] = useState<string[]>([]);
@@ -305,8 +311,8 @@ function CompareView({
       .finally(() => setLoadingB(false));
   }, [loteIdsB.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredA = useMemo(() => applyNotaRules(notasA, rules), [notasA]); // eslint-disable-line react-hooks/exhaustive-deps
-  const filteredB = useMemo(() => applyNotaRules(notasB, rules), [notasB]); // eslint-disable-line react-hooks/exhaustive-deps
+  const filteredA = useMemo(() => applyNotaRules(notasA, rules), [notasA, rules]);
+  const filteredB = useMemo(() => applyNotaRules(notasB, rules), [notasB, rules]);
   const groupsA = useMemo(() => buildIeGroups(filteredA, valorMinimoIe), [filteredA, valorMinimoIe]);
   const groupsB = useMemo(() => buildIeGroups(filteredB, valorMinimoIe), [filteredB, valorMinimoIe]);
   const diff = useMemo(() => compareIeGroups(groupsA, groupsB), [groupsA, groupsB]);
@@ -320,6 +326,23 @@ function CompareView({
 
   const hasSelection = loteIdsA.length > 0 && loteIdsB.length > 0;
   const loading = loadingA || loadingB;
+
+  async function exportarComparacao() {
+    const savePath = await save({
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+      defaultPath: 'comparacao-ies.xlsx',
+    });
+    if (!savePath) return;
+    try {
+      await writeFile(savePath, generateCompareExcelBytes(diff));
+      toast.success(
+        `Excel: ${diff.gained.length} ganhas, ${diff.lost.length} perdidas, ${diff.common.length} em comum`,
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(`Erro ao exportar a comparação: ${String(err)}`);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -388,6 +411,20 @@ function CompareView({
 
       {hasSelection && !loading && (
         <div className="space-y-4">
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportarComparacao}
+              disabled={
+                diff.gained.length + diff.lost.length +
+                diff.common.length + diff.changedToCF.length === 0
+              }
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Excel da comparação
+            </Button>
+          </div>
+
           {/* Summary badges */}
           <div className="flex flex-wrap gap-3">
             <div className="rounded-lg bg-green-500/10 border border-green-500/20 px-4 py-2 text-center min-w-28">
@@ -412,22 +449,22 @@ function CompareView({
 
           {/* Gained */}
           {diff.gained.length > 0 && (
-            <DiffSection title="IEs ganhas no período B" color="green" groups={diff.gained} onRowClick={onRowClick} />
+            <DiffSection title="IEs ganhas no período B" color="green" groups={diff.gained} origem="Período B" onRowClick={onRowClick} />
           )}
 
           {/* Lost */}
           {diff.lost.length > 0 && (
-            <DiffSection title="IEs perdidas (saíram)" color="red" groups={diff.lost} onRowClick={onRowClick} />
+            <DiffSection title="IEs perdidas (saíram)" color="red" groups={diff.lost} origem="Período A" onRowClick={onRowClick} />
           )}
 
           {/* Changed to CF */}
           {diff.changedToCF.length > 0 && (
-            <DiffSection title="Viraram Consumidor Final" color="amber" groups={diff.changedToCF} onRowClick={onRowClick} />
+            <DiffSection title="Viraram Consumidor Final" color="amber" groups={diff.changedToCF} origem="Período A" onRowClick={onRowClick} />
           )}
 
           {/* Common */}
           {diff.common.length > 0 && (
-            <DiffSection title={`Em comum (${diff.common.length})`} color="default" groups={diff.common} onRowClick={onRowClick} collapsed />
+            <DiffSection title={`Em comum (${diff.common.length})`} color="default" groups={diff.common} origem="Período A" onRowClick={onRowClick} collapsed />
           )}
         </div>
       )}
@@ -439,13 +476,17 @@ function DiffSection({
   title,
   color,
   groups,
+  origem,
   onRowClick,
   collapsed = false,
 }: {
   title: string;
   color: 'green' | 'red' | 'amber' | 'default';
   groups: IeGroup[];
-  onRowClick: (g: IeGroup) => void;
+  // compareIeGroups devolve lost/common/changedToCF com os objetos do período A
+  // e só gained vem do B — o painel precisa dizer de qual período são os números.
+  origem: string;
+  onRowClick: (g: IeGroup, origem: string) => void;
   collapsed?: boolean;
 }) {
   const [open, setOpen] = useState(!collapsed);
@@ -484,7 +525,7 @@ function DiffSection({
           </TableHeader>
           <TableBody>
             {groups.map((g) => (
-              <TableRow key={g.ie} className="cursor-pointer hover:bg-accent/50" onClick={() => onRowClick(g)}>
+              <TableRow key={g.ie} className="cursor-pointer hover:bg-accent/50" onClick={() => onRowClick(g, origem)}>
                 <TableCell className="font-mono text-xs">{g.ie || '—'}</TableCell>
                 <TableCell className="text-sm max-w-48 truncate" title={g.xNome}>{g.xNome}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{g.municipio}</TableCell>
@@ -592,15 +633,32 @@ export default function Tabelao() {
   }, []);
 
   // ── regras de negócio ───────────────────────────────────────────────────────
-  // Loaded once per mount; user changes rules in Settings and returns to this page
-  const rules = useMemo(() => loadRules(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Vêm do contexto: uma alteração no Settings reflete aqui na hora.
+  const rules = data.rules;
   const metaIes = rules.metaIes;
-  const [valorMinimoIe, setValorMinimoIe] = useState(() => rules.valorMinimoIe);
+
+  // Filtro de sessão, NÃO a regra. Antes este campo gravava direto em
+  // localStorage['valor_minimo_ie'] a cada tecla, sobrescrevendo a regra
+  // configurada no Settings e movendo os KPIs do Dashboard e do Import —
+  // telas que nem exibem um campo de valor mínimo.
+  const [valorMinimoIe, setValorMinimoIe] = useState(rules.valorMinimoIe);
+
+  // Ressincroniza quando a regra muda no Settings, desde que o usuário não
+  // tenha um filtro próprio em vigor.
+  const regraValorMinimo = rules.valorMinimoIe;
+  const valorMinimoTocado = useRef(false);
+  useEffect(() => {
+    if (!valorMinimoTocado.current) setValorMinimoIe(regraValorMinimo);
+  }, [regraValorMinimo]);
 
   function handleValorMinimoChange(v: string) {
-    const n = parseFloat(v) || 0;
-    setValorMinimoIe(n);
-    localStorage.setItem('valor_minimo_ie', String(n));
+    valorMinimoTocado.current = true;
+    setValorMinimoIe(parseFloat(v) || 0);
+  }
+
+  function resetValorMinimo() {
+    valorMinimoTocado.current = false;
+    setValorMinimoIe(regraValorMinimo);
   }
 
   // ── filters & sort ──────────────────────────────────────────────────────────
@@ -644,7 +702,7 @@ export default function Tabelao() {
 
   const notasRuleFiltered = useMemo(
     () => applyNotaRules(notasDateFiltered, rules),
-    [notasDateFiltered], // eslint-disable-line react-hooks/exhaustive-deps
+    [notasDateFiltered, rules],
   );
 
   const allGroups = useMemo(
@@ -713,6 +771,16 @@ export default function Tabelao() {
         ? 'Nenhum lote'
         : `${selectedLoteIds.length} lotes`;
 
+  // Descreve o recorte da tabela principal para o painel da IE deixar claro
+  // sobre que conjunto os números da primeira seção foram calculados.
+  const recorteLabel = [
+    loteBreadcrumb,
+    dateFrom || dateTo
+      ? `${dateFrom ? formatDate(dateFrom) : '...'} a ${dateTo ? formatDate(dateTo) : '...'}`
+      : null,
+    valorMinimoIe > 0 ? `valor mín. R$ ${valorMinimoIe.toLocaleString('pt-BR')}` : null,
+  ].filter(Boolean).join(' · ');
+
   // ── lote toggle ─────────────────────────────────────────────────────────────
   function toggleLote(id: string) {
     setSelectedLoteIds((prev) =>
@@ -756,17 +824,36 @@ export default function Tabelao() {
     } catch { toast.error('Erro ao exportar Excel'); }
   }
 
-  async function exportPdf() {
+  // O PDF antes saía só com KPIs — nenhuma IE — apesar de vir de uma tela
+  // chamada "Tabelão de IEs Distintas". Agora o conteúdo é escolhido na hora.
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
+
+  async function exportPdf(mode: PdfMode) {
+    setPdfDialogOpen(false);
     const savePath = await save({ filters: [{ name: 'PDF', extensions: ['pdf'] }], defaultPath: 'relatorio-nfe.pdf' });
     if (!savePath) return;
     try {
-      await writeFile(savePath, generatePdfBytes(notasFiltradas, resumoFiltrado, loteBreadcrumb, empresa?.nome ?? ''));
+      await writeFile(
+        savePath,
+        generatePdfBytes(
+          notasFiltradas,
+          resumoFiltrado,
+          loteBreadcrumb,
+          empresa?.nome ?? '',
+          mode,
+          filteredGroups,
+        ),
+      );
       toast.success('PDF exportado');
-    } catch { toast.error('Erro ao exportar PDF'); }
+    } catch (err) {
+      console.error(err);
+      toast.error(`Erro ao exportar PDF: ${String(err)}`);
+    }
   }
 
   // ── IE detail sheet ─────────────────────────────────────────────────────────
   const [selectedGroup, setSelectedGroup] = useState<IeGroup | null>(null);
+  const [selectedOrigem, setSelectedOrigem] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
 
   // ── virtual table ────────────────────────────────────────────────────────────
@@ -778,8 +865,9 @@ export default function Tabelao() {
     overscan: 15,
   });
 
-  function openIeDetail(g: IeGroup) {
+  function openIeDetail(g: IeGroup, origem?: string) {
     setSelectedGroup(g);
+    setSelectedOrigem(origem ?? recorteLabel);
     setSheetOpen(true);
   }
 
@@ -829,7 +917,7 @@ export default function Tabelao() {
                 <Button variant="outline" size="sm" onClick={exportExcel} disabled={notasFiltradas.length === 0}>
                   <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Excel
                 </Button>
-                <Button variant="outline" size="sm" onClick={exportPdf} disabled={notasFiltradas.length === 0}>
+                <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)} disabled={notasFiltradas.length === 0}>
                   <FileText className="h-3.5 w-3.5 mr-1.5" /> PDF
                 </Button>
               </>
@@ -1080,6 +1168,16 @@ export default function Tabelao() {
                             <X className="h-3 w-3" /> limpar
                           </button>
                         )}
+                        {valorMinimoIe !== regraValorMinimo && (
+                          <button
+                            type="button"
+                            className="text-xs text-muted-foreground hover:text-foreground"
+                            onClick={resetValorMinimo}
+                            title="Volta ao valor definido em Configurações"
+                          >
+                            voltar ao padrão (R$ {regraValorMinimo.toLocaleString('pt-BR')})
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3">
@@ -1261,11 +1359,35 @@ export default function Tabelao() {
         </div>
       </div>
 
+      {/* ── escolha do conteúdo do PDF ── */}
+      <Dialog open={pdfDialogOpen} onOpenChange={setPdfDialogOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>O que incluir no PDF?</DialogTitle></DialogHeader>
+          <div className="space-y-2">
+            {([
+              ['kpis', 'Somente indicadores', 'Totais de notas, IEs e valor. Sem a lista de IEs.'],
+              ['todas', 'Indicadores + todas as IEs', `As ${filteredGroups.length} IEs da tela, com a coluna Cons. Final marcando cada uma.`],
+              ['elegiveis', 'Indicadores + IEs elegíveis', `Somente as ${filteredGroups.filter((g) => !g.isConsumidorFinal).length} IEs não Consumidor Final, que contam para a meta.`],
+            ] as const).map(([mode, titulo, desc]) => (
+              <button
+                key={mode}
+                type="button"
+                className="w-full text-left rounded-lg border border-border px-4 py-3 hover:border-primary/50 hover:bg-accent/30 transition-colors"
+                onClick={() => exportPdf(mode)}
+              >
+                <p className="text-sm font-medium">{titulo}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── IE detail sheet ── */}
       <IeDetailSheet
         group={selectedGroup}
-        allNotas={notas}
         lotes={doneLotes}
+        recorteLabel={selectedOrigem}
         open={sheetOpen}
         onClose={() => setSheetOpen(false)}
       />

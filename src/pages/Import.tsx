@@ -21,7 +21,7 @@ import { Progress } from '@/components/ui/progress';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, fetchNotas, markLoteError } from '@/lib/db';
 import { notify } from '@/lib/notify';
-import { applyNotaRules, loadRules } from '@/lib/rules';
+import { applyNotaRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
 import type { NFe, Resumo } from '@/lib/types';
 
@@ -134,7 +134,7 @@ export default function Import() {
     setLoadingNotas(true);
     fetchNotas(activeLote.id)
       .then((notas) => {
-        const rules = loadRules();
+        const rules = data.rules;
         const fNotas = applyNotaRules(notas, rules);
         const groups = buildIeGroups(fNotas, rules.valorMinimoIe);
         setViewNotas(notas);
@@ -155,7 +155,9 @@ export default function Import() {
         setViewNotas([]); setFilteredNotas([]); setFilteredStats(null); setActiveRules(null);
       })
       .finally(() => setLoadingNotas(false));
-  }, [activeLote?.id, activeLote?.status, reloadKey]);
+    // data.rules nas deps: alterar CFOP/UF no Settings deve refazer os KPIs e o
+    // painel de descartadas desta tela, não esperar a próxima montagem.
+  }, [activeLote?.id, activeLote?.status, reloadKey, data.rules]);
 
   // ── Reprocess flow ──────────────────────────────────────────────────────────
   type ReprocessPhase = 'idle' | 'confirm' | 'processing';

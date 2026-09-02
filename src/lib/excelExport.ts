@@ -1,10 +1,7 @@
 import * as XLSX from 'xlsx';
 import { buildIeGroups } from './db';
+import type { IeComparison } from './db';
 import type { IeGroup, NFe } from './types';
-
-function brl(v: number): string {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function sheetNotas(notas: NFe[]): XLSX.WorkSheet {
   const rows = notas.map((n) => ({
@@ -66,6 +63,40 @@ function sheetIesNcf(groups: IeGroup[]): XLSX.WorkSheet {
     { wch: 46 }, { wch: 16 }, { wch: 16 }, { wch: 10 },
   ];
   return ws;
+}
+
+/** Uma aba do diff, com as mesmas colunas da aba de IEs elegíveis. */
+function sheetDiff(groups: IeGroup[]): XLSX.WorkSheet {
+  const rows = groups.map((g) => ({
+    'IE': g.ie,
+    'CNPJ': g.cnpjDest,
+    'Nome': g.xNome,
+    'Município': g.municipio,
+    'UF': g.ufEnd,
+    'Valor Total (R$)': g.valorTotal,
+    'Qtd Notas': g.qtdNotas,
+    'Última Emissão': g.dataEmissaoLatest,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 5 },
+    { wch: 16 }, { wch: 10 }, { wch: 14 },
+  ];
+  return ws;
+}
+
+/**
+ * Planilha do modo Comparar: uma aba por bucket do diff. Antes as listas de
+ * ganhas/perdidas — o resultado da comparação trimestral — só existiam na tela,
+ * sem nenhuma forma de exportar.
+ */
+export function generateCompareExcelBytes(diff: IeComparison): Uint8Array {
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheetDiff(diff.gained), 'IEs ganhas');
+  XLSX.utils.book_append_sheet(wb, sheetDiff(diff.lost), 'IEs perdidas');
+  XLSX.utils.book_append_sheet(wb, sheetDiff(diff.changedToCF), 'Viraram CF');
+  XLSX.utils.book_append_sheet(wb, sheetDiff(diff.common), 'Em comum');
+  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
 }
 
 export function generateExcelBytes(notas: NFe[]): Uint8Array {

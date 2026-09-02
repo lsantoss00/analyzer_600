@@ -32,6 +32,7 @@ import {
   updateLote,
 } from '@/lib/storage';
 import type { AppData, Lote } from '@/lib/types';
+import { loadRules, saveRules, type BusinessRules } from '@/lib/rules';
 
 // ---------------------------------------------------------------------------
 // State
@@ -39,11 +40,16 @@ import type { AppData, Lote } from '@/lib/types';
 
 interface State extends AppData {
   isLoading: boolean;
+  /** Regras de negócio no contexto para que o Settings as altere e as telas de
+   *  análise reajam na hora, em vez de cada uma congelar o que o localStorage
+   *  tinha quando montou. */
+  rules: BusinessRules;
 }
 
 type Action =
   | { type: 'LOAD'; payload: AppData }
-  | { type: 'SET'; payload: Partial<AppData> }
+  | { type: 'SET'; payload: Partial<State> }
+  | { type: 'SET_RULES'; payload: Partial<BusinessRules> }
   | { type: 'LOADING'; payload: boolean };
 
 function reducer(state: State, action: Action): State {
@@ -52,6 +58,10 @@ function reducer(state: State, action: Action): State {
       return { ...state, ...action.payload, isLoading: false };
     case 'SET':
       return { ...state, ...action.payload };
+    // Merge no reducer em vez de no callback: não há janela de leitura obsoleta
+    // se duas atualizações caírem no mesmo tick.
+    case 'SET_RULES':
+      return { ...state, rules: { ...state.rules, ...action.payload } };
     case 'LOADING':
       return { ...state, isLoading: action.payload };
     default:
@@ -64,6 +74,9 @@ const initialState: State = {
   empresaAtiva: null,
   loteAtivo: null,
   isLoading: true,
+  // Leitura síncrona do localStorage — ao contrário das preferências (SQLite,
+  // assíncrono), as regras já estão corretas no primeiro render.
+  rules: loadRules(),
 };
 
 // ---------------------------------------------------------------------------
@@ -84,6 +97,7 @@ interface AppDataContextType {
   refreshLote: (lote: Lote) => void;
   setEmpresaAtiva: (id: string | null) => void;
   setLoteAtivo: (id: string | null) => void;
+  updateRules: (partial: Partial<BusinessRules>) => void;
 }
 
 const AppDataContext = createContext<AppDataContextType | null>(null);
@@ -295,6 +309,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ---------------------------------------------------------------------------
+  // Regras de negócio
+  // ---------------------------------------------------------------------------
+
+  // Mesmo padrão dos setters acima: despacha para o estado e persiste na mesma
+  // função. O armazenamento continua sendo o localStorage (saveRules), então
+  // não há migration envolvida — o que muda é que as telas agora reagem.
+  const updateRulesFn = useCallback((partial: Partial<BusinessRules>) => {
+    saveRules(partial);
+    dispatch({ type: 'SET_RULES', payload: partial });
+  }, []);
+
   return (
     <AppDataContext.Provider
       value={{
@@ -311,6 +337,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         refreshLote: refreshLoteFn,
         setEmpresaAtiva,
         setLoteAtivo,
+        updateRules: updateRulesFn,
       }}
     >
       {children}

@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, buildMesGroups, fetchNotasByLotes } from '@/lib/db';
-import { applyNotaRules, loadRules } from '@/lib/rules';
+import { applyNotaRules } from '@/lib/rules';
 import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
 import type { IeGroup, MonthStat, NFe, Resumo } from '@/lib/types';
 import {
@@ -139,8 +139,14 @@ export default function Dashboard() {
   // Incrementado pelo botão "Tentar novamente" para re-disparar o efeito de carga.
   const [reloadKey, setReloadKey] = useState(0);
 
-  const rules = loadRules();
+  // Do contexto: uma alteração no Settings re-dispara o efeito de carga abaixo,
+  // em vez de ficar num loadRules() por render que nunca entrava nas deps.
+  const rules = data.rules;
   const metaIes = rules.metaIes;
+
+  // Com "Todos os lotes" (o padrão), importar/excluir/reprocessar muda a lista
+  // de ids sem mudar selectedLoteId — sem isto os gráficos ficam no conjunto antigo.
+  const lotesEmpresaKey = lotesEmpresa.map((l) => l.id).join(',');
 
   useEffect(() => {
     if (lotesEmpresa.length === 0) {
@@ -185,7 +191,7 @@ export default function Dashboard() {
         setResumo(null); setMonthStats([]); setIeGroups([]); setAllIeGroups([]);
       })
       .finally(() => setLoading(false));
-  }, [selectedLoteId, selectedEmpresaId, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLoteId, selectedEmpresaId, reloadKey, lotesEmpresaKey, rules]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pieData = resumo
     ? [
@@ -240,7 +246,9 @@ export default function Dashboard() {
 
         {lotesEmpresa.length === 0 && (
           <div className="flex justify-center items-center py-32 text-muted-foreground text-sm">
-            Nenhum lote processado. Importe XMLs primeiro.
+            {data.isLoading
+              ? 'Carregando dados...'
+              : 'Nenhum lote processado. Importe XMLs primeiro.'}
           </div>
         )}
 
