@@ -301,17 +301,26 @@ export function buildMesGroups(notas: NFe[]): MesGroup[] {
 }
 
 // ---------------------------------------------------------------------------
-// Reprocessing
+// Lote status
 // ---------------------------------------------------------------------------
 
-export async function resetLote(id: string): Promise<void> {
+/** Marca um lote como falho. Sem isto ele fica preso em 'processing' para sempre. */
+export async function markLoteError(id: string): Promise<void> {
   const d = await db();
-  await d.execute('DELETE FROM notas WHERE lote_id=$1', [id]);
-  await d.execute(
-    "UPDATE lotes SET status='pending', total_arquivos=0, total_valido=0, resumo=NULL WHERE id=$1",
-    [id],
-  );
+  await d.execute("UPDATE lotes SET status='error' WHERE id=$1", [id]);
 }
+
+/**
+ * Nenhum import sobrevive ao fechamento do app, então qualquer lote em
+ * 'processing' no boot é resto de uma falha ou de um encerramento abrupto.
+ * Retorna quantos lotes órfãos foram recuperados.
+ */
+export async function recoverStuckLotes(): Promise<number> {
+  const d = await db();
+  const res = await d.execute("UPDATE lotes SET status='error' WHERE status='processing'");
+  return res.rowsAffected ?? 0;
+}
+
 
 // ---------------------------------------------------------------------------
 // Preferences

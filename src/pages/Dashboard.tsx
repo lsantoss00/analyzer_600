@@ -11,15 +11,17 @@ import {
   CartesianGrid,
   ResponsiveContainer,
 } from 'recharts';
-import { BarChart3, DollarSign, Loader2, TrendingUp, Users } from 'lucide-react';
+import { AlertTriangle, BarChart3, DollarSign, Loader2, TrendingUp, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import AppLayout from '@/components/AppLayout';
 import { MetaProgress } from '@/components/MetaProgress';
 import StatCard from '@/components/StatCard';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, buildMesGroups, fetchNotasByLotes } from '@/lib/db';
 import { applyNotaRules, loadRules } from '@/lib/rules';
+import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
 import type { IeGroup, MonthStat, NFe, Resumo } from '@/lib/types';
 import {
   Select,
@@ -111,12 +113,10 @@ export default function Dashboard() {
     e.lotes.some((l) => l.status === 'done'),
   );
 
-  const initialEmpresaId =
-    data.empresaAtiva && empresasComLotes.some((e) => e.id === data.empresaAtiva)
-      ? data.empresaAtiva
-      : (empresasComLotes[0]?.id ?? '');
-
-  const [selectedEmpresaId, setSelectedEmpresaId] = useState(initialEmpresaId);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useSelectedEmpresa(
+    empresasComLotes,
+    data.empresaAtiva,
+  );
 
   const lotesEmpresa = empresasComLotes
     .find((e) => e.id === selectedEmpresaId)
@@ -135,6 +135,9 @@ export default function Dashboard() {
   const [ieGroups, setIeGroups] = useState<IeGroup[]>([]);
   const [allIeGroups, setAllIeGroups] = useState<IeGroup[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  // Incrementado pelo botão "Tentar novamente" para re-disparar o efeito de carga.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const rules = loadRules();
   const metaIes = rules.metaIes;
@@ -149,6 +152,7 @@ export default function Dashboard() {
       : [selectedLoteId];
 
     setLoading(true);
+    setLoadError(null);
     fetchNotasByLotes(ids)
       .then((ns: NFe[]) => {
         const filtered = applyNotaRules(ns, rules);
@@ -173,9 +177,15 @@ export default function Dashboard() {
           valorTotal: validNotas.reduce((s, n) => s + n.vNf, 0),
         });
       })
-      .catch(console.error)
+      .catch((err) => {
+        // Antes isto era console.error: num build empacotado não há console, e a
+        // página ficava vazia abaixo do header sem nenhuma explicação.
+        console.error(err);
+        setLoadError(String(err));
+        setResumo(null); setMonthStats([]); setIeGroups([]); setAllIeGroups([]);
+      })
       .finally(() => setLoading(false));
-  }, [selectedLoteId, selectedEmpresaId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLoteId, selectedEmpresaId, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pieData = resumo
     ? [
@@ -241,7 +251,18 @@ export default function Dashboard() {
           </div>
         )}
 
-        {lotesEmpresa.length > 0 && !loading && resumo && (
+        {lotesEmpresa.length > 0 && !loading && loadError && (
+          <div className="flex flex-col items-center justify-center py-32 gap-3 text-sm">
+            <AlertTriangle className="h-6 w-6 text-destructive" />
+            <p className="text-muted-foreground">Não foi possível carregar os dados deste lote.</p>
+            <p className="text-xs text-muted-foreground/70 max-w-md text-center font-mono">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+              Tentar novamente
+            </Button>
+          </div>
+        )}
+
+        {lotesEmpresa.length > 0 && !loading && !loadError && resumo && (
           <>
             {/* Meta progress — só mostra quando vendo todos os lotes */}
             {selectedLoteId === ALL_LOTES && (

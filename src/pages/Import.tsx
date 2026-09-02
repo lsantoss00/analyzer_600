@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { useAppData } from '@/contexts/AppDataContext';
-import { buildIeGroups, fetchNotas, resetLote } from '@/lib/db';
+import { buildIeGroups, fetchNotas, markLoteError } from '@/lib/db';
 import { notify } from '@/lib/notify';
 import { applyNotaRules, loadRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
@@ -144,7 +144,12 @@ export default function Import() {
           valorTotal: fNotas.reduce((s, n) => s + n.vNf, 0),
         });
       })
-      .catch(console.error)
+      .catch((err) => {
+        // Antes era console.error: a lista sumia e os KPIs desapareciam sem aviso.
+        console.error(err);
+        toast.error(`Erro ao carregar as notas do lote: ${String(err)}`);
+        setViewNotas([]); setFilteredNotas([]); setFilteredStats(null); setActiveRules(null);
+      })
       .finally(() => setLoadingNotas(false));
   }, [activeLote?.id, activeLote?.status]);
 
@@ -155,6 +160,10 @@ export default function Import() {
   const [folderPath, setFolderPath] = useState('');
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const unlistenRef = useRef<(() => void) | null>(null);
+
+  // Listener global: sem cleanup ele sobrevive ao unmount e segue chamando
+  // setProgress num componente morto se a usuária navegar durante o reprocesso.
+  useEffect(() => () => { unlistenRef.current?.(); unlistenRef.current = null; }, []);
 
   async function handleReprocess() {
     const selected = await openDialog({ directory: true, multiple: false });
@@ -189,7 +198,8 @@ export default function Import() {
     unlistenRef.current = unlisten;
 
     try {
-      await resetLote(activeLote.id);
+      // Sem resetLote aqui: o DELETE agora vive na mesma transação dos INSERTs
+      // dentro de process_lote, então uma falha deixa as notas antigas intactas.
       const resumo: Resumo = await invoke('process_lote', {
         loteId: activeLote.id,
         xmlPaths: scanned,
@@ -199,6 +209,10 @@ export default function Import() {
       toast.success(`Reprocessado: ${rMsg}`);
       notify(`Lote "${activeLote.nome}" reprocessado`, rMsg);
     } catch (err) {
+      await markLoteError(activeLote.id).catch(() => {});
+      // Sem este refresh a tela segue mostrando as notas antigas em memória e a
+      // sidebar segue dizendo 'done' — a UI mentiria sobre o estado do lote.
+      await refresh().catch(() => {});
       toast.error(`Erro ao reprocessar: ${String(err)}`);
     } finally {
       unlisten();

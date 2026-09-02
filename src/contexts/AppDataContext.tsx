@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import React, {
   createContext,
   useCallback,
@@ -13,6 +14,7 @@ import {
   fetchPreferences,
   insertEmpresa,
   insertLote,
+  recoverStuckLotes,
   savePreferences,
   updateEmpresa,
   updateEmpresaOrdem,
@@ -96,6 +98,16 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     dispatch({ type: 'LOADING', payload: true });
     try {
+      // Antes de ler: qualquer lote ainda em 'processing' é resto de um import
+      // que morreu — sem isto ele gira um spinner eterno e some da análise.
+      const recovered = await recoverStuckLotes();
+      if (recovered > 0) {
+        toast.warning(
+          recovered === 1
+            ? '1 lote ficou incompleto e foi marcado com erro. Reprocesse ou exclua.'
+            : `${recovered} lotes ficaram incompletos e foram marcados com erro.`,
+        );
+      }
       const [empresas, prefs] = await Promise.all([fetchEmpresas(), fetchPreferences()]);
       dispatch({
         type: 'LOAD',
@@ -107,6 +119,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       });
     } catch (err) {
       console.error('Failed to load app data', err);
+      toast.error(`Erro ao carregar os dados: ${String(err)}`);
       dispatch({ type: 'LOADING', payload: false });
     }
   }, []);
@@ -268,12 +281,18 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
   const setEmpresaAtiva = useCallback((id: string | null) => {
     empresaAtivaRef.current = id;
     dispatch({ type: 'SET', payload: { empresaAtiva: id, loteAtivo: null } });
-    savePreferences(id, null).catch(console.error);
+    savePreferences(id, null).catch((err) => {
+      console.error(err);
+      toast.error('Não foi possível salvar a empresa ativa.');
+    });
   }, []);
 
   const setLoteAtivo = useCallback((id: string | null) => {
     dispatch({ type: 'SET', payload: { loteAtivo: id } });
-    savePreferences(empresaAtivaRef.current, id).catch(console.error);
+    savePreferences(empresaAtivaRef.current, id).catch((err) => {
+      console.error(err);
+      toast.error('Não foi possível salvar o lote ativo.');
+    });
   }, []);
 
   return (

@@ -44,9 +44,21 @@ fn parse_xml_file(path: &str) -> ParseResult {
         }
     }
 
-    let xml = match std::fs::read_to_string(path) {
-        Ok(s) => s,
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
         Err(_) => return ParseResult::Skip,
+    };
+
+    // NF-e exportada de ERP brasileiro costuma vir como ISO-8859-1. read_to_string
+    // exigiria UTF-8 e descartaria esses arquivos em silêncio, então decodificamos
+    // com fallback. Em ISO-8859-1 cada byte mapeia direto para o code point de mesmo
+    // valor. Os 32 slots de pontuação exclusivos do Windows-1252 (0x80-0x9F) viram
+    // mojibake; não afeta CNPJ/IE/valores. Se aparecer na prática, usar encoding_rs.
+    // O roxmltree não rejeita declaração de encoding diferente de UTF-8, então basta
+    // entregar a String já decodificada sem reescrever o cabeçalho do XML.
+    let xml = match String::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(e) => e.into_bytes().iter().map(|&b| b as char).collect::<String>(),
     };
 
     // Try evento first (smaller/faster check)
@@ -142,6 +154,13 @@ fn process_files_sync(
         .map_err(|e| e.to_string())?;
 
     let tx = conn.transaction().map_err(|e| e.to_string())?;
+
+    // Substituição atômica: o DELETE vive na mesma transação dos INSERTs, então ou
+    // as notas novas entram ou as antigas permanecem. Antes isso era um resetLote()
+    // commitado no frontend ANTES do processamento — uma falha aqui apagava o lote
+    // sem repor nada. Para um lote novo o DELETE é no-op.
+    tx.execute("DELETE FROM notas WHERE lote_id=?1", rusqlite::params![&lote_id])
+        .map_err(|e| e.to_string())?;
 
     for n in &valid {
         tx.execute(

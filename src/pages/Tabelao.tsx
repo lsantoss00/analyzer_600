@@ -1,6 +1,7 @@
 import { save } from '@tauri-apps/plugin-dialog';
 import { writeFile } from '@tauri-apps/plugin-fs';
 import {
+  AlertTriangle,
   ArrowLeftRight,
   BarChart3,
   ChevronDown,
@@ -45,6 +46,7 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, compareIeGroups, fetchNotasByLotes } from '@/lib/db';
 import { applyNotaRules, loadRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
+import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
 import { generateExcelBytes } from '@/lib/excelExport';
 import { generatePdfBytes } from '@/lib/pdfExport';
 import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
@@ -79,21 +81,23 @@ function LoteChips({
   onToggle: (id: string) => void;
   onSelectAll: () => void;
 }) {
-  if (lotes.length <= 1) return null;
+  if (lotes.length === 0) return null;
   return (
     <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        className={[
-          'text-xs px-3 py-1 rounded-full border transition-colors',
-          selected.length === lotes.length
-            ? 'bg-primary text-primary-foreground border-primary'
-            : 'border-border text-muted-foreground hover:border-primary/50',
-        ].join(' ')}
-        onClick={onSelectAll}
-      >
-        Todos
-      </button>
+      {lotes.length > 1 && (
+        <button
+          type="button"
+          className={[
+            'text-xs px-3 py-1 rounded-full border transition-colors',
+            selected.length === lotes.length
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'border-border text-muted-foreground hover:border-primary/50',
+          ].join(' ')}
+          onClick={onSelectAll}
+        >
+          Todos
+        </button>
+      )}
       {lotes.map((l) => (
         <button
           key={l.id}
@@ -286,13 +290,19 @@ function CompareView({
   useEffect(() => {
     if (loteIdsA.length === 0) { setNotasA([]); return; }
     setLoadingA(true);
-    fetchNotasByLotes(loteIdsA).then(setNotasA).catch(console.error).finally(() => setLoadingA(false));
+    fetchNotasByLotes(loteIdsA)
+      .then(setNotasA)
+      .catch((err) => { console.error(err); toast.error(`Erro ao carregar o período A: ${String(err)}`); })
+      .finally(() => setLoadingA(false));
   }, [loteIdsA.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (loteIdsB.length === 0) { setNotasB([]); return; }
     setLoadingB(true);
-    fetchNotasByLotes(loteIdsB).then(setNotasB).catch(console.error).finally(() => setLoadingB(false));
+    fetchNotasByLotes(loteIdsB)
+      .then(setNotasB)
+      .catch((err) => { console.error(err); toast.error(`Erro ao carregar o período B: ${String(err)}`); })
+      .finally(() => setLoadingB(false));
   }, [loteIdsB.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredA = useMemo(() => applyNotaRules(notasA, rules), [notasA]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -498,12 +508,10 @@ export default function Tabelao() {
     [data.empresas],
   );
 
-  const initialEmpresaId =
-    data.empresaAtiva && empresasComLotes.some((e) => e.id === data.empresaAtiva)
-      ? data.empresaAtiva
-      : (empresasComLotes[0]?.id ?? '');
-
-  const [selectedEmpresaId, setSelectedEmpresaId] = useState(initialEmpresaId);
+  const [selectedEmpresaId, setSelectedEmpresaId] = useSelectedEmpresa(
+    empresasComLotes,
+    data.empresaAtiva,
+  );
 
   const empresa = empresasComLotes.find((e) => e.id === selectedEmpresaId) ?? null;
 
@@ -515,35 +523,39 @@ export default function Tabelao() {
   const [selectedLoteIds, setSelectedLoteIds] = useState<string[]>([]);
   const [compareMode, setCompareMode] = useState(false);
 
+  // Abre sempre zerado — a usuária escolhe o período nos chips.
   useEffect(() => {
-    const ids = doneLotes.map((l) => l.id);
-    if (data.loteAtivo && ids.includes(data.loteAtivo)) {
-      setSelectedLoteIds([data.loteAtivo]);
-    } else {
-      setSelectedLoteIds(ids);
-    }
-  }, [empresa?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    setSelectedLoteIds([]);
+  }, [empresa?.id]);
 
   function handleEmpresaChange(id: string | null) {
     if (!id) return;
     setSelectedEmpresaId(id);
-    const lotes = empresasComLotes.find((e) => e.id === id)?.lotes.filter((l) => l.status === 'done') ?? [];
-    setSelectedLoteIds(lotes.map((l) => l.id));
+    setSelectedLoteIds([]);
     setCompareMode(false);
   }
 
   const [notas, setNotas] = useState<NFe[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (compareMode) return;
-    if (selectedLoteIds.length === 0) { setNotas([]); return; }
+    if (selectedLoteIds.length === 0) { setNotas([]); setLoadError(null); return; }
     setLoading(true);
+    setLoadError(null);
     fetchNotasByLotes(selectedLoteIds)
       .then(setNotas)
-      .catch(console.error)
+      .catch((err) => {
+        // Antes era console.error, e a tabela exibia "Nenhum lote selecionado" —
+        // factualmente errado, já que havia lote selecionado.
+        console.error(err);
+        setLoadError(String(err));
+        setNotas([]);
+      })
       .finally(() => setLoading(false));
-  }, [selectedLoteIds.join(','), compareMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedLoteIds.join(','), compareMode, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── column visibility ────────────────────────────────────────────────────────
   const [visibleCols, setVisibleCols] = useState<Set<ColId>>(loadCols);
@@ -844,7 +856,30 @@ export default function Tabelao() {
                 <MetaProgress count={resumo.iesNaoConsumidor} meta={metaIes} />
               )}
 
-              {loading ? (
+              {selectedLoteIds.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-24 text-muted-foreground text-sm gap-2">
+                  <ListFilter className="h-6 w-6 opacity-40" />
+                  <p>Selecione um período acima para carregar o tabelão.</p>
+                  {doneLotes.length > 1 && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => setSelectedLoteIds([doneLotes[doneLotes.length - 1].id])}
+                    >
+                      Usar o último período ({doneLotes[doneLotes.length - 1].nome})
+                    </button>
+                  )}
+                </div>
+              ) : loadError ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-3 text-sm">
+                  <AlertTriangle className="h-6 w-6 text-destructive" />
+                  <p className="text-muted-foreground">Não foi possível carregar as notas do período.</p>
+                  <p className="text-xs text-muted-foreground/70 max-w-md text-center font-mono">{loadError}</p>
+                  <Button variant="outline" size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+                    Tentar novamente
+                  </Button>
+                </div>
+              ) : loading ? (
                 <div className="flex items-center gap-2 justify-center py-20 text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   <span>Carregando...</span>
@@ -1136,7 +1171,7 @@ export default function Tabelao() {
                           <TableRow>
                             <TableCell colSpan={2 + visibleCols.size} className="text-center text-muted-foreground py-12 text-sm">
                               {notas.length === 0
-                                ? 'Nenhum lote selecionado.'
+                                ? 'Nenhuma nota encontrada nos períodos selecionados.'
                                 : 'Nenhum resultado para os filtros aplicados.'}
                             </TableCell>
                           </TableRow>

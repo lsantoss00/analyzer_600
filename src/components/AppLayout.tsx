@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { BarChart3, FolderOpen, LayoutGrid } from 'lucide-react';
+import { BarChart3, FolderOpen, LayoutGrid, Loader2 } from 'lucide-react';
 import AppSidebar from './AppSidebar';
 import { useAppData } from '@/contexts/AppDataContext';
 
@@ -73,7 +73,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <AppSidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <main className="flex-1 overflow-hidden">
-          {data.empresas.length === 0 ? <OnboardingScreen /> : children}
+          {/* Enquanto o load do banco está em voo, empresas é [] — sem este gate
+              o onboarding pisca em toda abertura e uma falha de carga fica
+              indistinguível de uma instalação nova. */}
+          {data.isLoading && data.empresas.length === 0 ? (
+            <div className="flex items-center gap-2 justify-center h-full text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Carregando dados...</span>
+            </div>
+          ) : data.empresas.length === 0 ? (
+            <OnboardingScreen />
+          ) : (
+            children
+          )}
         </main>
         <div className="h-6 border-t border-border/40 px-4 flex items-center gap-3 shrink-0 select-none">
           <span className="text-[11px] text-muted-foreground/40 font-mono">

@@ -76,7 +76,12 @@ export default function AppSidebar() {
     const ids = data.empresas.map((e) => e.id);
     const oldIdx = ids.indexOf(active.id as string);
     const newIdx = ids.indexOf(over.id as string);
-    reorderEmpresas(arrayMove(ids, oldIdx, newIdx)).catch(console.error);
+    // O reorder é otimista: se a gravação falhar, a ordem da UI divergiria da do
+    // banco silenciosamente até a próxima abertura.
+    reorderEmpresas(arrayMove(ids, oldIdx, newIdx)).catch((err) => {
+      console.error(err);
+      toast.error('Não foi possível salvar a nova ordem das empresas.');
+    });
   }
 
   return (

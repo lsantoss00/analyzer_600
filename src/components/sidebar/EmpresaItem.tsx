@@ -12,9 +12,10 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { notify } from '@/lib/notify';
+import { markLoteError } from '@/lib/db';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Empresa, Resumo } from '@/lib/types';
 import { Button } from '../ui/button';
@@ -46,8 +47,9 @@ export default function EmpresaItem({ empresa }: Props) {
   const [nome, setNome] = useState(empresa.nome);
   const [cnpj, setCnpj] = useState(empresa.cnpj);
   const [saving, setSaving] = useState(false);
-  const [pendingDelete, setPendingDelete] = useState(false);
-  const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // Import flow
   const [importPhase, setImportPhase] = useState<ImportPhase>('idle');
@@ -80,31 +82,17 @@ export default function EmpresaItem({ empresa }: Props) {
     }
   }
 
-  function handleDelete() {
-    setPendingDelete(true);
-
-    const tid = setTimeout(async () => {
-      try {
-        await removeEmpresa(empresa.id);
-      } catch {
-        toast.error('Erro ao remover empresa');
-        setPendingDelete(false);
-      }
-    }, 6000);
-    deleteTimerRef.current = tid;
-
-    toast(`Empresa "${empresa.nome}" removida`, {
-      description: `${empresa.lotes.length} lote(s) serão excluídos`,
-      action: {
-        label: 'Desfazer',
-        onClick: () => {
-          clearTimeout(tid);
-          deleteTimerRef.current = null;
-          setPendingDelete(false);
-        },
-      },
-      duration: 6000,
-    });
+  async function handleConfirmDelete() {
+    setDeleting(true);
+    try {
+      await removeEmpresa(empresa.id);
+      toast.success(`Empresa "${empresa.nome}" excluída`);
+      setDeleteOpen(false);
+    } catch (err) {
+      toast.error(`Erro ao remover empresa: ${String(err)}`);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handlePickFolder() {
@@ -131,6 +119,10 @@ export default function EmpresaItem({ empresa }: Props) {
     setImportPhase('config');
   }
 
+  // O listener é global; sem cleanup ele sobrevive ao unmount e segue chamando
+  // setProgress num componente morto se a usuária navegar durante o import.
+  useEffect(() => () => { unlistenRef.current?.(); unlistenRef.current = null; }, []);
+
   async function handleProcess() {
     if (!loteNome.trim()) return;
     setImportPhase('processing');
@@ -141,8 +133,10 @@ export default function EmpresaItem({ empresa }: Props) {
     });
     unlistenRef.current = unlisten;
 
+    // Declarado fora do try para o catch conseguir marcar o lote como falho.
+    let loteId: string | null = null;
     try {
-      const loteId = await addLote(empresa.id, loteNome.trim());
+      loteId = await addLote(empresa.id, loteNome.trim());
       const resumo: Resumo = await invoke('process_lote', { loteId, xmlPaths: scanned });
       await refresh();
       setLoteAtivo(loteId);
@@ -150,6 +144,9 @@ export default function EmpresaItem({ empresa }: Props) {
       toast.success(`Lote processado: ${msg}`);
       notify(`Lote "${loteNome}" processado`, msg);
     } catch (err) {
+      // addLote já gravou status='processing'; sem marcar o erro o lote fica preso.
+      if (loteId) await markLoteError(loteId).catch(() => {});
+      await refresh().catch(() => {});
       toast.error(`Erro ao processar: ${String(err)}`);
     } finally {
       unlisten();
@@ -168,17 +165,6 @@ export default function EmpresaItem({ empresa }: Props) {
   }
 
   const pct = progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
-
-  if (pendingDelete) {
-    return (
-      <div ref={setNodeRef} style={style} className="mb-1 opacity-40 select-none">
-        <div className="flex items-center gap-1 rounded-md px-1 py-1">
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span className="flex-1 truncate text-sm font-medium line-through">{empresa.nome}</span>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div ref={setNodeRef} style={style} className="mb-1">
@@ -224,7 +210,11 @@ export default function EmpresaItem({ empresa }: Props) {
             variant="ghost"
             size="icon"
             className="h-5 w-5 hover:text-destructive"
-            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteConfirmText('');
+              setDeleteOpen(true);
+            }}
           >
             <Trash2 className="h-3 w-3" />
           </Button>
@@ -314,6 +304,48 @@ export default function EmpresaItem({ empresa }: Props) {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Exclusão de empresa: cascade em lotes e notas, sem backup e sem undo.
+          Por isso exige o nome digitado, não só um clique de confirmação. */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Excluir empresa?</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p>
+              A empresa <strong>{empresa.nome}</strong>, seus{' '}
+              <strong>{empresa.lotes.length}</strong> lote(s) e todas as{' '}
+              <strong>{empresa.lotes.reduce((acc, l) => acc + l.totalValido, 0).toLocaleString('pt-BR')}</strong> notas
+              importadas serão excluídos permanentemente.
+            </p>
+            <p className="text-destructive text-xs">
+              Esta ação não pode ser desfeita e não há backup.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                Digite <span className="font-mono">{empresa.nome}</span> para confirmar
+              </Label>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder={empresa.nome}
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={deleting || deleteConfirmText.trim() !== empresa.nome}
+            >
+              {deleting ? 'Excluindo...' : 'Excluir empresa'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
