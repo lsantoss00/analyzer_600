@@ -121,6 +121,10 @@ export default function Import() {
   const [filteredStats, setFilteredStats] = useState<Resumo | null>(null);
   const [activeRules, setActiveRules] = useState<BusinessRules | null>(null);
   const [loadingNotas, setLoadingNotas] = useState(false);
+  // Um reprocesso não muda o id nem o status do lote ('done' -> 'done'), então o
+  // efeito abaixo não re-executaria e a tela ficaria com as notas antigas —
+  // enquanto os badges do header, que leem activeLote, já mostrariam o novo total.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!activeLote || activeLote.status !== 'done') {
@@ -151,7 +155,7 @@ export default function Import() {
         setViewNotas([]); setFilteredNotas([]); setFilteredStats(null); setActiveRules(null);
       })
       .finally(() => setLoadingNotas(false));
-  }, [activeLote?.id, activeLote?.status]);
+  }, [activeLote?.id, activeLote?.status, reloadKey]);
 
   // ── Reprocess flow ──────────────────────────────────────────────────────────
   type ReprocessPhase = 'idle' | 'confirm' | 'processing';
@@ -205,6 +209,7 @@ export default function Import() {
         xmlPaths: scanned,
       });
       await refresh();
+      setReloadKey((k) => k + 1);
       const rMsg = `${resumo.notasTotais.toLocaleString('pt-BR')} notas válidas de ${scanned.length.toLocaleString('pt-BR')} arquivos`;
       toast.success(`Reprocessado: ${rMsg}`);
       notify(`Lote "${activeLote.nome}" reprocessado`, rMsg);
