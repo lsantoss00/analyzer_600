@@ -2,6 +2,7 @@ mod commands;
 mod parser;
 
 use commands::process::{process_lote, scan_folder};
+use tauri::Manager;
 
 fn migrations() -> Vec<tauri_plugin_sql::Migration> {
     vec![
@@ -93,6 +94,25 @@ pub fn run() {
                 .add_migrations("sqlite:analyzer.db", migrations())
                 .build(),
         )
+        .setup(|app| {
+            if let Some(win) = app.get_webview_window("main") {
+                // Encolhe o tamanho de "restaurar" para caber no monitor atual.
+                // Sem isso, em telas antigas (1024x768) a janela de 1400x900
+                // transborda para o monitor vizinho ao sair do maximizado.
+                if let Ok(Some(monitor)) = win.current_monitor() {
+                    let scale = monitor.scale_factor();
+                    let area = monitor.work_area().size.to_logical::<f64>(scale);
+                    let w = (area.width * 0.9).min(1400.0).max(900.0);
+                    let h = (area.height * 0.9).min(900.0).max(600.0);
+                    let _ = win.set_size(tauri::LogicalSize::new(w, h));
+                    let _ = win.center();
+                }
+                let _ = win.maximize();
+                // Sempre, mesmo se algo acima falhar — a janela nasce invisible.
+                let _ = win.show();
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![scan_folder, process_lote])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
