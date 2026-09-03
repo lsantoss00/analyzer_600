@@ -71,13 +71,3 @@ export function reorderEmpresas(data: AppData, ids: string[]): AppData {
   };
 }
 
-export function reorderLotes(data: AppData, empresaId: string, ids: string[]): AppData {
-  return {
-    ...data,
-    empresas: data.empresas.map((e) => {
-      if (e.id !== empresaId) return e;
-      const map = new Map(e.lotes.map((l) => [l.id, l]));
-      return { ...e, lotes: ids.map((id, i) => ({ ...map.get(id)!, ordem: i })) };
-    }),
-  };
-}

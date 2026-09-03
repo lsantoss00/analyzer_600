@@ -1,10 +1,13 @@
 <!doctype html>
-<html lang="en">
+<!-- A classe "dark" precisa ficar aqui, não no #root: o variant do index.css é
+     `&:is(.dark *)` (só descendentes) e Dialog/Sheet/Select fazem portal para o
+     body, que ficaria fora do seletor se a classe estivesse no #root. -->
+<html lang="pt-BR" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/png" href="/icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri + React + Typescript</title>
+    <title>Analisador NF-e</title>
   </head>
 
   <body>

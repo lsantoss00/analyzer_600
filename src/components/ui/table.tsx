@@ -4,11 +4,23 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+/**
+ * O container tem overflow-x-auto, e pelo CSS um overflow-x:auto com
+ * overflow-y:visible faz o UA computar overflow-y:auto — ou seja, ele vira um
+ * scroll container e passa a ser o ancestral de rolagem mais próximo do thead.
+ * Numa tabela com cabeçalho sticky dentro de OUTRO div que rola, o sticky gruda
+ * neste container (que nunca rola) e o cabeçalho some junto com as linhas.
+ * containerClassName permite ao call site neutralizar isso com overflow-visible.
+ */
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-x-auto", containerClassName)}
     >
       <table
         data-slot="table"

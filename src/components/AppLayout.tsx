@@ -36,7 +36,8 @@ function OnboardingScreen() {
           <div>
             <p className="text-sm font-medium">2. Importe os XMLs</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Clique em <strong>+</strong> ao lado da empresa e selecione a pasta com os XMLs de NF-e
+              Na linha da empresa criada, clique no <strong>+</strong> à direita e
+              selecione a pasta com os XMLs de NF-e
             </p>
           </div>
         </div>
@@ -62,7 +63,14 @@ function OnboardingScreen() {
   );
 }
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default function AppLayout({
+  children,
+  /** Telas de análise não fazem sentido sem empresa; Configurações faz. */
+  requerEmpresa = true,
+}: {
+  children: ReactNode;
+  requerEmpresa?: boolean;
+}) {
   const { data } = useAppData();
 
   const doneLotes = data.empresas.flatMap((e) => e.lotes).filter((l) => l.status === 'done');
@@ -81,7 +89,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Carregando dados...</span>
             </div>
-          ) : data.empresas.length === 0 ? (
+          ) : requerEmpresa && data.empresas.length === 0 ? (
             <OnboardingScreen />
           ) : (
             children
@@ -93,7 +101,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <span className="mx-2">·</span>
             {doneLotes.length} {doneLotes.length === 1 ? 'lote' : 'lotes'}
             <span className="mx-2">·</span>
-            {totalNotas.toLocaleString('pt-BR')} notas no banco
+            {totalNotas.toLocaleString('pt-BR')} notas importadas (sem filtros)
           </span>
         </div>
       </div>

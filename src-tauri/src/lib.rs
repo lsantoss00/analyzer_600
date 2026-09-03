@@ -79,6 +79,17 @@ fn migrations() -> Vec<tauri_plugin_sql::Migration> {
             CREATE INDEX IF NOT EXISTS idx_notas_ie_cnpj ON notas(ie_dest, cnpj_dest);
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    // ATENÇÃO: o sqlx compara checksum das migrations já aplicadas. Editar o SQL
+    // da v1 ou da v2 faz o app deixar de abrir para quem já tem banco. Toda
+    // mudança de schema entra numa versão nova, aditiva.
+    tauri_plugin_sql::Migration {
+        version: 3,
+        description: "add_lote_descartes",
+        sql: "
+            ALTER TABLE lotes ADD COLUMN descartes TEXT DEFAULT NULL;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
     }]
 }
 

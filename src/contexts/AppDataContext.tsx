@@ -19,7 +19,6 @@ import {
   updateEmpresa,
   updateEmpresaOrdem,
   updateLoteNome,
-  updateLoteOrdem,
 } from '@/lib/db';
 import {
   addEmpresa,
@@ -27,7 +26,6 @@ import {
   removeEmpresa,
   removeLote,
   reorderEmpresas,
-  reorderLotes,
   updateEmpresa as updateEmpresaLocal,
   updateLote,
 } from '@/lib/storage';
@@ -93,8 +91,6 @@ interface AppDataContextType {
   addLote: (empresaId: string, nome: string) => Promise<string>;
   editLoteNome: (id: string, nome: string) => Promise<void>;
   removeLote: (id: string) => Promise<void>;
-  reorderLotes: (empresaId: string, ids: string[]) => Promise<void>;
-  refreshLote: (lote: Lote) => void;
   setEmpresaAtiva: (id: string | null) => void;
   setLoteAtivo: (id: string | null) => void;
   updateRules: (partial: Partial<BusinessRules>) => void;
@@ -214,6 +210,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       totalArquivos: 0,
       totalValido: 0,
       resumo: null,
+      descartes: null,
       ordem,
     };
     dispatch({
@@ -253,32 +250,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
     if (next.loteAtivo !== state.loteAtivo) {
       await savePreferences(state.empresaAtiva, next.loteAtivo);
     }
-  }, [state]);
-
-  const reorderLotesFn = useCallback(async (empresaId: string, ids: string[]) => {
-    const next = reorderLotes(
-      { empresas: state.empresas, empresaAtiva: state.empresaAtiva, loteAtivo: state.loteAtivo },
-      empresaId,
-      ids,
-    );
-    dispatch({ type: 'SET', payload: { empresas: next.empresas } });
-    const empresa = next.empresas.find((e) => e.id === empresaId);
-    if (empresa) {
-      await Promise.all(empresa.lotes.map((l) => updateLoteOrdem(l.id, l.ordem)));
-    }
-  }, [state]);
-
-  const refreshLoteFn = useCallback((lote: Lote) => {
-    dispatch({
-      type: 'SET',
-      payload: {
-        empresas: updateLote(
-          { empresas: state.empresas, empresaAtiva: state.empresaAtiva, loteAtivo: state.loteAtivo },
-          lote.id,
-          lote,
-        ).empresas,
-      },
-    });
   }, [state]);
 
   // ---------------------------------------------------------------------------
@@ -333,8 +304,6 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
         addLote: addLoteFn,
         editLoteNome: editLoteNomeFn,
         removeLote: removeLoteFn,
-        reorderLotes: reorderLotesFn,
-        refreshLote: refreshLoteFn,
         setEmpresaAtiva,
         setLoteAtivo,
         updateRules: updateRulesFn,

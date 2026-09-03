@@ -28,10 +28,47 @@ struct ProgressPayload {
     total: usize,
 }
 
+/// Por que um arquivo foi descartado. Antes tudo virava um Skip mudo e os seis
+/// caminhos colapsavam no único número `total_arquivos - total_valido`.
+#[derive(Debug, Clone, Copy)]
+pub enum MotivoDescarte {
+    /// Acima de MAX_XML_BYTES.
+    ArquivoGrande,
+    /// Não deu para ler: permissão, arquivo travado, sumiu entre o scan e aqui.
+    ErroLeitura,
+    /// XML bem-formado mas sem infNFe — outro documento fiscal, evento não-cancelamento, etc.
+    NaoEhNfe,
+    /// XML malformado ou NF-e sem os blocos obrigatórios.
+    XmlInvalido,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Descartes {
+    #[serde(rename = "arquivoGrande")]
+    pub arquivo_grande: usize,
+    #[serde(rename = "erroLeitura")]
+    pub erro_leitura: usize,
+    #[serde(rename = "naoEhNfe")]
+    pub nao_eh_nfe: usize,
+    #[serde(rename = "xmlInvalido")]
+    pub xml_invalido: usize,
+    /// Nota válida anulada por um evento de cancelamento na mesma pasta.
+    pub cancelados: usize,
+    /// Mesma chave aparecendo mais de uma vez (NFe_X.xml + nfeProc_X.xml).
+    pub duplicados: usize,
+    /// INSERT OR IGNORE recusou a linha (chave já existente).
+    #[serde(rename = "jaExistiam")]
+    pub ja_existiam: usize,
+    /// Arquivos de evento de cancelamento. Não são erro — cumpriram seu papel
+    /// anulando notas — mas também não viram nota, e sem contá-los a soma das
+    /// categorias não fecha com `total_arquivos - total_valido`.
+    pub eventos: usize,
+}
+
 enum ParseResult {
     NFe(NfeParsed),
     Evento(String), // cancelled chave
-    Skip,
+    Skip(MotivoDescarte),
 }
 
 const MAX_XML_BYTES: u64 = 50 * 1024 * 1024; // 50 MB
@@ -40,13 +77,13 @@ fn parse_xml_file(path: &str) -> ParseResult {
     // Rejeita arquivos acima do limite antes de carregá-los na memória
     if let Ok(meta) = std::fs::metadata(path) {
         if meta.len() > MAX_XML_BYTES {
-            return ParseResult::Skip;
+            return ParseResult::Skip(MotivoDescarte::ArquivoGrande);
         }
     }
 
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
-        Err(_) => return ParseResult::Skip,
+        Err(_) => return ParseResult::Skip(MotivoDescarte::ErroLeitura),
     };
 
     // NF-e exportada de ERP brasileiro costuma vir como ISO-8859-1. read_to_string
@@ -70,7 +107,16 @@ fn parse_xml_file(path: &str) -> ParseResult {
         return ParseResult::NFe(nfe);
     }
 
-    ParseResult::Skip
+    // parse_nfe devolve None tanto para XML corrompido quanto para documento que
+    // simplesmente não é NF-e. Separar os dois importa: "não é NF-e" costuma ser
+    // pasta com outros documentos, "XML inválido" é arquivo problemático.
+    // Checagem por substring para não montar o DOM uma terceira vez; um arquivo
+    // corrompido sem a string cai em NaoEhNfe, imprecisão aceitável aqui.
+    if xml.contains("infNFe") {
+        ParseResult::Skip(MotivoDescarte::XmlInvalido)
+    } else {
+        ParseResult::Skip(MotivoDescarte::NaoEhNfe)
+    }
 }
 
 fn compute_resumo(notas: &[NfeParsed]) -> Resumo {
@@ -124,14 +170,21 @@ fn process_files_sync(
     // Separate NF-es from cancelled chaves
     let mut cancelled: HashSet<String> = HashSet::new();
     let mut nfes: Vec<NfeParsed> = Vec::new();
+    let mut descartes = Descartes::default();
 
     for r in results {
         match r {
             ParseResult::NFe(n) => nfes.push(n),
             ParseResult::Evento(chave) => {
+                descartes.eventos += 1;
                 cancelled.insert(chave);
             }
-            ParseResult::Skip => {}
+            ParseResult::Skip(motivo) => match motivo {
+                MotivoDescarte::ArquivoGrande => descartes.arquivo_grande += 1,
+                MotivoDescarte::ErroLeitura => descartes.erro_leitura += 1,
+                MotivoDescarte::NaoEhNfe => descartes.nao_eh_nfe += 1,
+                MotivoDescarte::XmlInvalido => descartes.xml_invalido += 1,
+            },
         }
     }
 
@@ -139,10 +192,23 @@ fn process_files_sync(
     // para a mesma nota. O INSERT OR IGNORE já descarta duplicatas no banco, mas o resumo
     // precisa ser calculado sobre o conjunto único para mostrar o número correto.
     let mut seen_chaves: HashSet<String> = HashSet::new();
-    let valid: Vec<NfeParsed> = nfes
-        .into_iter()
-        .filter(|n| is_valid_nfe(n, &cancelled) && seen_chaves.insert(n.chave.clone()))
-        .collect();
+    let mut valid: Vec<NfeParsed> = Vec::with_capacity(nfes.len());
+    for n in nfes {
+        // Avaliadas em separado: com `a && b` o curto-circuito impedia que uma
+        // nota cancelada fosse também contabilizada como duplicada, e os números
+        // não fechavam contra total_arquivos.
+        let cancelada = !is_valid_nfe(&n, &cancelled);
+        let nova_chave = seen_chaves.insert(n.chave.clone());
+        if cancelada {
+            descartes.cancelados += 1;
+        }
+        if !nova_chave {
+            descartes.duplicados += 1;
+        }
+        if !cancelada && nova_chave {
+            valid.push(n);
+        }
+    }
 
     let resumo = compute_resumo(&valid);
 
@@ -162,8 +228,9 @@ fn process_files_sync(
     tx.execute("DELETE FROM notas WHERE lote_id=?1", rusqlite::params![&lote_id])
         .map_err(|e| e.to_string())?;
 
+    let mut inseridas = 0usize;
     for n in &valid {
-        tx.execute(
+        let n_linhas = tx.execute(
             "INSERT OR IGNORE INTO notas (
                 id, lote_id, chave, data_emissao, cfop, uf_destino,
                 ie_dest, cnpj_dest, x_nome, ind_final, n_nf, mod_nf, serie,
@@ -183,12 +250,16 @@ fn process_files_sync(
             ],
         )
         .map_err(|e| e.to_string())?;
+        // total_valido era valid.len(), que SUPER-reporta se o OR IGNORE dispara.
+        inseridas += n_linhas;
     }
+    descartes.ja_existiam = valid.len() - inseridas;
 
     let resumo_json = serde_json::to_string(&resumo).map_err(|e| e.to_string())?;
+    let descartes_json = serde_json::to_string(&descartes).map_err(|e| e.to_string())?;
     tx.execute(
-        "UPDATE lotes SET status='done', total_arquivos=?1, total_valido=?2, resumo=?3 WHERE id=?4",
-        rusqlite::params![total as i64, valid.len() as i64, resumo_json, &lote_id],
+        "UPDATE lotes SET status='done', total_arquivos=?1, total_valido=?2, resumo=?3, descartes=?4 WHERE id=?5",
+        rusqlite::params![total as i64, inseridas as i64, resumo_json, descartes_json, &lote_id],
     )
     .map_err(|e| e.to_string())?;
 

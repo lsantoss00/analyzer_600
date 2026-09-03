@@ -22,7 +22,9 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
-        <Toaster richColors position="bottom-right" />
+        {/* O sonner tem tema próprio, fora dos tokens do index.css, e o default
+            é light — sem isto todo toast sai claro sobre a UI escura. */}
+        <Toaster richColors theme="dark" position="bottom-right" />
       </AppDataProvider>
     </ErrorBoundary>
   );

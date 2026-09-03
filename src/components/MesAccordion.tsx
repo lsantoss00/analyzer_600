@@ -8,10 +8,7 @@ import {
 } from './ui/accordion';
 import { Badge } from './ui/badge';
 import NFeTable from './NFeTable';
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { brl } from '@/lib/utils';
 
 interface Props {
   notas: NFe[];
@@ -34,7 +31,7 @@ export default function MesAccordion({ notas }: Props) {
               <div className="flex flex-wrap gap-2 ml-auto mr-4">
                 <Badge variant="secondary">{g.resumo.notasTotais} notas</Badge>
                 <Badge variant="secondary">{g.resumo.iesTotal} IEs</Badge>
-                <Badge variant="outline" className="text-green-600 border-green-200">
+                <Badge variant="outline" className="text-muted-foreground">
                   {g.resumo.iesConsumidorFinal} CF
                 </Badge>
                 <Badge variant="outline" className="font-mono">

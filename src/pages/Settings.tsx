@@ -67,7 +67,7 @@ export default function Settings() {
   }
 
   return (
-    <AppLayout>
+    <AppLayout requerEmpresa={false}>
       <div className="p-6 space-y-6 max-w-2xl">
         <div>
           <h1 className="text-2xl font-bold">Configurações</h1>

@@ -19,22 +19,7 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { fetchNotasByIe } from '@/lib/db';
 import { applyNotaRules } from '@/lib/rules';
 import type { IeGroup, Lote, NFe } from '@/lib/types';
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatCnpj(v: string) {
-  const d = (v ?? '').replace(/\D/g, '');
-  if (d.length !== 14) return v;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
-function formatDate(iso: string) {
-  if (!iso || iso.length < 10) return iso ?? '';
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return `${d}/${m}/${y}`;
-}
+import { brl, formatCnpj, formatDate } from '@/lib/utils';
 
 interface LoteRow {
   lote: Lote;
@@ -113,9 +98,9 @@ function LoteRowsTable({
                 <TableCell className="text-xs text-muted-foreground">{formatDate(r.dataMax)}</TableCell>
                 <TableCell>
                   {r.isCf ? (
-                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
+                    <Badge variant="outline" className="text-xs text-muted-foreground">Sim</Badge>
                   ) : (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
+                    <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Não</Badge>
                   )}
                 </TableCell>
               </TableRow>

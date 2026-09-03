@@ -4,10 +4,11 @@ import { cn } from "@/lib/utils"
 
 function Progress({
   className,
+  trackClassName,
   children,
   value,
   ...props
-}: ProgressPrimitive.Root.Props) {
+}: ProgressPrimitive.Root.Props & { trackClassName?: string }) {
   return (
     <ProgressPrimitive.Root
       value={value}
@@ -16,7 +17,10 @@ function Progress({
       {...props}
     >
       {children}
-      <ProgressTrack>
+      {/* A barra visível é o Track. Sem repassar isto, um `h-2` no className
+          cairia no Root (um flex sem altura) e a barra continuaria com os 4px
+          do `h-1` hardcoded — era o que acontecia nos 3 chamadores. */}
+      <ProgressTrack className={trackClassName}>
         <ProgressIndicator />
       </ProgressTrack>
     </ProgressPrimitive.Root>

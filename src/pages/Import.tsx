@@ -1,7 +1,7 @@
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Loader2, RefreshCw } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileX, FolderOpen, Loader2, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useEffect } from 'react';
 import { toast } from 'sonner';
@@ -23,26 +23,29 @@ import { buildIeGroups, fetchNotas, markLoteError } from '@/lib/db';
 import { notify } from '@/lib/notify';
 import { applyNotaRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
-import type { NFe, Resumo } from '@/lib/types';
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import type { Lote, NFe, Resumo } from '@/lib/types';
+import { brl } from '@/lib/utils';
 
 // ── DiscardedSection ───────────────────────────────────────────────────────────
 
-function DiscardedSection({ all, filtered, rules }: { all: NFe[]; filtered: NFe[]; rules: BusinessRules }) {
+// A prop `filtered` foi removida: era recebida e nunca usada.
+function DiscardedSection({ all, rules }: { all: NFe[]; rules: BusinessRules }) {
   const [open, setOpen] = useState(false);
 
   const cfopSet = new Set(rules.cfops);
   const ufSet = new Set(rules.ufs.map((u) => u.toUpperCase()));
 
-  const rejected = all.filter((n) => !cfopSet.has(n.cfop) || !ufSet.has(n.ufDestino.toUpperCase()));
+  // Espelha applyNotaRules, incluindo a saída `ufSet.size === 0`. Sem ela, com a
+  // lista de UF vazia este painel reportava TODAS as notas como rejeitadas por UF
+  // enquanto applyNotaRules mantinha todas — os dois discordavam na mesma tela.
+  const ufOk = (n: NFe) => ufSet.size === 0 || ufSet.has(n.ufDestino.toUpperCase());
+
+  const rejected = all.filter((n) => !cfopSet.has(n.cfop) || !ufOk(n));
   if (rejected.length === 0) return null;
 
-  const byCfop = rejected.filter((n) => !cfopSet.has(n.cfop) && ufSet.has(n.ufDestino.toUpperCase()));
-  const byUf   = rejected.filter((n) =>  cfopSet.has(n.cfop) && !ufSet.has(n.ufDestino.toUpperCase()));
-  const byBoth = rejected.filter((n) => !cfopSet.has(n.cfop) && !ufSet.has(n.ufDestino.toUpperCase()));
+  const byCfop = rejected.filter((n) => !cfopSet.has(n.cfop) && ufOk(n));
+  const byUf   = rejected.filter((n) =>  cfopSet.has(n.cfop) && !ufOk(n));
+  const byBoth = rejected.filter((n) => !cfopSet.has(n.cfop) && !ufOk(n));
 
   const distinctCfops = [...new Set(byCfop.concat(byBoth).map((n) => n.cfop))].sort();
   const distinctUfs   = [...new Set(byUf.concat(byBoth).map((n) => n.ufDestino.toUpperCase()))].sort();
@@ -109,8 +112,58 @@ function DiscardedSection({ all, filtered, rules }: { all: NFe[]; filtered: NFe[
   );
 }
 
+/**
+ * Arquivos que nunca viraram nota. É OUTRA coisa do DiscardedSection abaixo,
+ * que mostra notas já no banco filtradas pelas regras de CFOP/UF — por isso
+ * fica visualmente separado e com outra cor.
+ */
+function DescartesSection({ lote }: { lote: Lote }) {
+  const d = lote.descartes;
+  if (!d) return null;
+
+  // ?? 0 em tudo: lotes importados com versões anteriores têm o JSON de
+  // descartes sem os campos mais novos.
+  const linhas = [
+    { label: 'Cancelados por evento', qtd: d.cancelados ?? 0, dica: 'Nota anulada por um XML de cancelamento na mesma pasta' },
+    { label: 'Eventos de cancelamento', qtd: d.eventos ?? 0, dica: 'O próprio XML do evento: não é nota, mas foi usado para anular uma' },
+    { label: 'Chave duplicada', qtd: d.duplicados ?? 0, dica: 'Mesma nota em dois arquivos (NFe_X.xml e nfeProc_X.xml)' },
+    { label: 'Não é NF-e', qtd: d.naoEhNfe ?? 0, dica: 'XML de outro tipo de documento' },
+    { label: 'XML inválido', qtd: d.xmlInvalido ?? 0, dica: 'Arquivo corrompido ou NF-e sem os blocos obrigatórios' },
+    { label: 'Erro de leitura', qtd: d.erroLeitura ?? 0, dica: 'Sem permissão, arquivo em uso ou removido durante o import' },
+    { label: 'Arquivo muito grande', qtd: d.arquivoGrande ?? 0, dica: 'Acima de 50 MB' },
+    { label: 'Já existiam no lote', qtd: d.jaExistiam ?? 0, dica: 'Chave já gravada anteriormente' },
+  ].filter((l) => l.qtd > 0);
+
+  const total = linhas.reduce((s, l) => s + l.qtd, 0);
+  if (total === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 px-4 py-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <FileX className="h-4 w-4 text-muted-foreground shrink-0" />
+        <span className="text-sm font-medium">
+          {total.toLocaleString('pt-BR')} de {lote.totalArquivos.toLocaleString('pt-BR')} arquivo(s) não viraram nota
+        </span>
+        {total !== lote.totalArquivos - lote.totalValido && (
+          <span className="text-xs text-amber-400" title="As categorias abaixo não somam a diferença entre arquivos lidos e notas gravadas">
+            contabilização incompleta
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3">
+        {linhas.map((l) => (
+          <div key={l.label} className="flex items-baseline justify-between gap-2" title={l.dica}>
+            <span className="text-xs text-muted-foreground truncate">{l.label}</span>
+            <span className="text-xs font-mono tabular-nums">{l.qtd.toLocaleString('pt-BR')}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Import() {
-  const { data, refresh, refreshLote } = useAppData();
+  const { data, refresh } = useAppData();
 
   const activeLote = data.empresas
     .flatMap((e) => e.lotes)
@@ -126,13 +179,19 @@ export default function Import() {
   // enquanto os badges do header, que leem activeLote, já mostrariam o novo total.
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Primitivas em vez do objeto: fetchEmpresas cria novos objetos Lote a cada
+  // refresh(), então depender de `activeLote` re-buscaria as notas em toda
+  // atualização do contexto.
+  const loteId = activeLote?.id;
+  const loteStatus = activeLote?.status;
+
   useEffect(() => {
-    if (!activeLote || activeLote.status !== 'done') {
+    if (!loteId || loteStatus !== 'done') {
       setViewNotas([]); setFilteredNotas([]); setFilteredStats(null); setActiveRules(null);
       return;
     }
     setLoadingNotas(true);
-    fetchNotas(activeLote.id)
+    fetchNotas(loteId)
       .then((notas) => {
         const rules = data.rules;
         const fNotas = applyNotaRules(notas, rules);
@@ -157,7 +216,7 @@ export default function Import() {
       .finally(() => setLoadingNotas(false));
     // data.rules nas deps: alterar CFOP/UF no Settings deve refazer os KPIs e o
     // painel de descartadas desta tela, não esperar a próxima montagem.
-  }, [activeLote?.id, activeLote?.status, reloadKey, data.rules]);
+  }, [loteId, loteStatus, reloadKey, data.rules]);
 
   // ── Reprocess flow ──────────────────────────────────────────────────────────
   type ReprocessPhase = 'idle' | 'confirm' | 'processing';
@@ -175,7 +234,7 @@ export default function Import() {
     const selected = await openDialog({ directory: true, multiple: false });
     if (!selected || typeof selected !== 'string') return;
 
-    let paths: string[] = [];
+    let paths: string[];
     try {
       paths = await invoke<string[]>('scan_folder', { path: selected });
     } catch {
@@ -247,7 +306,7 @@ export default function Import() {
             <div className="flex items-center gap-2 flex-wrap">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
               <h2 className="text-lg font-semibold">{activeLote.nome}</h2>
-              <Badge variant="outline" className="text-green-600">
+              <Badge variant="outline" className="text-muted-foreground">
                 {activeLote.totalValido.toLocaleString('pt-BR')} no banco
               </Badge>
               <Badge variant="secondary">
@@ -267,6 +326,8 @@ export default function Import() {
                 <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Reprocessar
               </Button>
             </div>
+
+            <DescartesSection lote={activeLote} />
 
             {filteredStats && (
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -291,7 +352,6 @@ export default function Import() {
                   label="Valor Total"
                   value={`R$ ${brl(filteredStats.valorTotal)}`}
                   icon={CheckCircle2}
-                  accent="amber"
                 />
               </div>
             )}
@@ -304,7 +364,7 @@ export default function Import() {
             ) : (
               <>
                 {activeRules && viewNotas.length > filteredNotas.length && (
-                  <DiscardedSection all={viewNotas} filtered={filteredNotas} rules={activeRules} />
+                  <DiscardedSection all={viewNotas} rules={activeRules} />
                 )}
                 <MesAccordion notas={filteredNotas} />
               </>
@@ -317,8 +377,14 @@ export default function Import() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground text-sm">
+            <FolderOpen className="h-6 w-6 opacity-40" />
             <p>Selecione um lote na barra lateral para visualizar as notas.</p>
-            <p className="text-xs">Para criar um novo lote, clique em <strong>+</strong> ao lado do nome da empresa.</p>
+            {/* Antes esta tela só dizia para clicar num "+" que ficava escondido
+                atrás do hover. Aqui o caminho é explícito. */}
+            <p className="text-xs">
+              Ou clique no <strong>+</strong> à direita do nome da empresa, na barra
+              lateral, para importar uma pasta de XMLs.
+            </p>
           </div>
         )}
       </div>
@@ -363,7 +429,7 @@ export default function Import() {
                   </div>
                   <span className="text-sm font-mono">{Math.round(pct)}%</span>
                 </div>
-                <Progress value={pct} className="h-2" />
+                <Progress value={pct} trackClassName="h-2" />
               </div>
             </>
           )}

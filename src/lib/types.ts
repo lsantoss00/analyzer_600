@@ -31,6 +31,22 @@ export interface Resumo {
   valorTotal: number;
 }
 
+/**
+ * Contagem de arquivos descartados no import, por motivo. Antes os seis
+ * caminhos de descarte colapsavam no único `totalArquivos - totalValido`.
+ * Lotes importados antes da migration v3 têm `descartes: null`.
+ */
+export interface Descartes {
+  arquivoGrande: number;
+  erroLeitura: number;
+  naoEhNfe: number;
+  xmlInvalido: number;
+  cancelados: number;
+  duplicados: number;
+  jaExistiam: number;
+  eventos: number;
+}
+
 export interface Lote {
   id: string;
   empresaId: string;
@@ -40,6 +56,7 @@ export interface Lote {
   totalArquivos: number;
   totalValido: number;
   resumo: Resumo | null;
+  descartes: Descartes | null;
   ordem: number;
 }
 

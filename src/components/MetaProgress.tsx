@@ -12,7 +12,7 @@ export function MetaProgress({ count, meta }: MetaProgressProps) {
       ? 'text-green-400'
       : count >= Math.round(meta * 0.67)
         ? 'text-amber-400'
-        : 'text-red-400';
+        : 'text-destructive';
 
   return (
     <div className="rounded-lg border border-border bg-card px-4 py-3 space-y-2">
@@ -23,7 +23,7 @@ export function MetaProgress({ count, meta }: MetaProgressProps) {
         </div>
         <span className={`text-sm font-semibold tabular-nums ${colorClass}`}>{pct}%</span>
       </div>
-      <Progress value={pct} className="h-2" />
+      <Progress value={pct} trackClassName="h-2" />
       {count >= meta && (
         <p className="text-xs text-green-400 font-medium">Meta atingida!</p>
       )}

@@ -22,7 +22,9 @@ import { useAppData } from '@/contexts/AppDataContext';
 import { buildIeGroups, buildMesGroups, fetchNotasByLotes } from '@/lib/db';
 import { applyNotaRules } from '@/lib/rules';
 import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
+import { chartTokens } from '@/lib/themeTokens';
 import type { IeGroup, MonthStat, NFe, Resumo } from '@/lib/types';
+import { brl, brlK } from '@/lib/utils';
 import {
   Select,
   SelectContent,
@@ -30,16 +32,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function brlK(v: number) {
-  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `R$ ${(v / 1_000).toFixed(0)}k`;
-  return `R$ ${brl(v)}`;
-}
 
 function ConcentracaoCard({ groups }: { groups: IeGroup[] }) {
   const sorted = [...groups].sort((a, b) => b.valorTotal - a.valorTotal).slice(0, 8);
@@ -90,23 +82,31 @@ function ConcentracaoCard({ groups }: { groups: IeGroup[] }) {
   );
 }
 
-const tooltipStyle = {
-  contentStyle: {
-    background: 'oklch(0.21 0.028 254)',
-    border: '1px solid oklch(0.31 0.024 255)',
-    borderRadius: '6px',
-    color: 'oklch(0.94 0.007 255)',
-    fontSize: '12px',
-  },
-  labelStyle: { color: 'oklch(0.94 0.007 255)', fontWeight: 600 },
-  cursor: { fill: 'oklch(0.31 0.024 255 / 0.4)' },
-};
-
-const PIE_COLORS = ['#4f8ef7', '#334155'];
+// Tamanho único para os ticks dos dois gráficos de barra (eram 11 e 10).
+const AXIS_FONT_SIZE = 11;
 
 const ALL_LOTES = '__all__';
 
 export default function Dashboard() {
+  // Dentro do componente, não no escopo de módulo: chartTokens() usa
+  // getComputedStyle e só é confiável depois do CSS aplicado. O helper
+  // memoiza, então chamar por render é barato.
+  const T = chartTokens();
+  const tooltipStyle = {
+    contentStyle: {
+      background: T.card,
+      border: `1px solid ${T.border}`,
+      borderRadius: T.radius,
+      color: T.foreground,
+      fontSize: '12px',
+    },
+    labelStyle: { color: T.foreground, fontWeight: 600 },
+    cursor: { fill: T.cursor },
+  };
+  // A segunda fatia era slate-700, que some contra o card e fazia "Cons. Final"
+  // parecer um buraco em vez de um segmento.
+  const PIE_COLORS = [T.series[0], T.series[2]];
+
   const { data } = useAppData();
 
   const empresasComLotes = data.empresas.filter((e) =>
@@ -301,7 +301,6 @@ export default function Dashboard() {
                 label="Valor Total"
                 value={`R$ ${brl(resumo.valorTotal)}`}
                 icon={DollarSign}
-                accent="amber"
               />
             </div>
 
@@ -336,7 +335,7 @@ export default function Dashboard() {
                         verticalAlign="bottom"
                         height={32}
                         formatter={(value) => (
-                          <span style={{ color: 'oklch(0.72 0.014 258)', fontSize: 11 }}>{value}</span>
+                          <span style={{ color: T.mutedForeground, fontSize: AXIS_FONT_SIZE }}>{value}</span>
                         )}
                       />
                     </PieChart>
@@ -352,10 +351,10 @@ export default function Dashboard() {
                 <CardContent className="flex-1 min-h-0 pb-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={monthStats} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.31 0.024 255 / 0.5)" />
-                      <XAxis dataKey="mes" tick={{ fontSize: 11, fill: 'oklch(0.72 0.014 258)' }} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
+                      <XAxis dataKey="mes" tick={{ fontSize: AXIS_FONT_SIZE, fill: T.mutedForeground }} />
                       <YAxis
-                        tick={{ fontSize: 11, fill: 'oklch(0.72 0.014 258)' }}
+                        tick={{ fontSize: AXIS_FONT_SIZE, fill: T.mutedForeground }}
                         tickFormatter={(v: number) =>
                           v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
                         }
@@ -364,7 +363,7 @@ export default function Dashboard() {
                         formatter={(v) => [`R$ ${brl(Number(v))}`, 'Valor']}
                         {...tooltipStyle}
                       />
-                      <Bar dataKey="valor" fill="#4f8ef7" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="valor" fill={T.series[0]} radius={[3, 3, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -379,17 +378,17 @@ export default function Dashboard() {
               <CardHeader className="pb-1">
                 <CardTitle className="text-sm font-medium">Top 10 IEs por Valor</CardTitle>
               </CardHeader>
-              <CardContent className="h-42">
+              <CardContent className="flex-1 min-h-0 pb-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
                     layout="vertical"
                     data={ieGroups}
                     margin={{ top: 0, right: 60, left: 20, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.31 0.024 255 / 0.5)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={T.grid} />
                     <XAxis
                       type="number"
-                      tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 258)' }}
+                      tick={{ fontSize: AXIS_FONT_SIZE, fill: T.mutedForeground }}
                       tickFormatter={(v: number) =>
                         v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
                       }
@@ -398,7 +397,7 @@ export default function Dashboard() {
                       type="category"
                       dataKey="ie"
                       width={90}
-                      tick={{ fontSize: 10, fill: 'oklch(0.72 0.014 258)' }}
+                      tick={{ fontSize: AXIS_FONT_SIZE, fill: T.mutedForeground }}
                     />
                     <Tooltip
                       formatter={(v) => [`R$ ${brl(Number(v))}`, 'Valor Total']}
@@ -407,7 +406,7 @@ export default function Dashboard() {
                       }
                       {...tooltipStyle}
                     />
-                    <Bar dataKey="valorTotal" fill="#4f8ef7" radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="valorTotal" fill={T.series[0]} radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>

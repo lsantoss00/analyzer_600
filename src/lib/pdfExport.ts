@@ -2,22 +2,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { buildMesGroups } from './db';
 import type { IeGroup, NFe, Resumo } from './types';
+import { brl, formatCnpj } from '@/lib/utils';
 
 /**
  * O que entra no PDF. 'kpis' é o relatório histórico (só indicadores);
  * as outras duas incluem a tabela de IEs, que é o que sustenta a apuração.
  */
 export type PdfMode = 'kpis' | 'todas' | 'elegiveis';
-
-function brl(v: number): string {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatCnpj(v: string): string {
-  const d = (v ?? '').replace(/\D/g, '');
-  if (d.length !== 14) return v;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
 
 export function generatePdfBytes(
   notas: NFe[],

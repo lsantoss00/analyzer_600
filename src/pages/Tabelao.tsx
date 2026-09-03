@@ -56,20 +56,9 @@ import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
 import { generateCompareExcelBytes, generateExcelBytes } from '@/lib/excelExport';
 import { generatePdfBytes, type PdfMode } from '@/lib/pdfExport';
 import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
+import { brl, formatCnpj, formatDate } from '@/lib/utils';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
-
-function formatCnpj(v: string) {
-  const d = (v ?? '').replace(/\D/g, '');
-  if (d.length !== 14) return v;
-  return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-}
-
-function formatDate(iso: string) {
-  if (!iso || iso.length < 10) return iso ?? '';
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return `${d}/${m}/${y}`;
-}
 
 type SortKey = 'ie' | 'xNome' | 'valorTotal' | 'qtdNotas' | 'dataEmissaoLatest';
 type SortDir = 'asc' | 'desc';
@@ -146,131 +135,6 @@ function loadCols(): Set<ColId> {
     if (saved) return new Set(JSON.parse(saved) as ColId[]);
   } catch {}
   return new Set(DEFAULT_COLS);
-}
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// ── IeTable ────────────────────────────────────────────────────────────────────
-
-function IeTable({
-  groups,
-  notas,
-  loading,
-  visibleCols,
-  onRowClick,
-  onCopy,
-}: {
-  groups: IeGroup[];
-  notas: NFe[];
-  loading: boolean;
-  visibleCols: Set<ColId>;
-  onRowClick: (g: IeGroup) => void;
-  onCopy: (text: string, label: string, e: React.MouseEvent) => void;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 justify-center py-20 text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Carregando...</span>
-      </div>
-    );
-  }
-
-  // IE + Nome always shown + toggleable cols
-  const colSpan = 2 + visibleCols.size;
-
-  return (
-    <div className="rounded-lg border border-border overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>IE</TableHead>
-            <TableHead>Nome</TableHead>
-            {visibleCols.has('cnpj')       && <TableHead>CNPJ</TableHead>}
-            {visibleCols.has('municipio')  && <TableHead>Município</TableHead>}
-            {visibleCols.has('data')       && <TableHead>Data</TableHead>}
-            {visibleCols.has('valorTotal') && <TableHead className="text-right">Valor Total</TableHead>}
-            {visibleCols.has('qtd')        && <TableHead className="text-right">Qtd NF</TableHead>}
-            {visibleCols.has('cf')         && <TableHead>Cons. Final</TableHead>}
-            {visibleCols.has('indFinal')   && <TableHead className="text-right">indFinal</TableHead>}
-            {visibleCols.has('uf')         && <TableHead>UF</TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {groups.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={colSpan} className="text-center text-muted-foreground py-12 text-sm">
-                {notas.length === 0 ? 'Nenhum lote selecionado.' : 'Nenhum resultado.'}
-              </TableCell>
-            </TableRow>
-          ) : (
-            groups.map((g) => (
-              <TableRow
-                key={g.ie}
-                className="cursor-pointer hover:bg-accent/50"
-                onClick={() => onRowClick(g)}
-              >
-                <TableCell
-                  className="font-mono text-xs font-medium group/cell"
-                  onClick={(e) => onCopy(g.ie, 'IE', e)}
-                  title="Clique para copiar"
-                >
-                  <span className="flex items-center gap-1">
-                    {g.ie || '—'}
-                    <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
-                  </span>
-                </TableCell>
-                <TableCell className="max-w-48 truncate text-sm" title={g.xNome}>{g.xNome}</TableCell>
-                {visibleCols.has('cnpj') && (
-                  <TableCell
-                    className="font-mono text-xs group/cell"
-                    onClick={(e) => onCopy(g.cnpjDest, 'CNPJ', e)}
-                    title="Clique para copiar"
-                  >
-                    <span className="flex items-center gap-1">
-                      {formatCnpj(g.cnpjDest)}
-                      <Copy className="h-2.5 w-2.5 text-muted-foreground/0 group-hover/cell:text-muted-foreground/50 transition-colors shrink-0" />
-                    </span>
-                  </TableCell>
-                )}
-                {visibleCols.has('municipio') && (
-                  <TableCell className="text-xs text-muted-foreground">
-                    {g.municipio}{g.ufEnd ? ` - ${g.ufEnd}` : ''}
-                  </TableCell>
-                )}
-                {visibleCols.has('data') && (
-                  <TableCell className="text-xs">{formatDate(g.dataEmissaoLatest)}</TableCell>
-                )}
-                {visibleCols.has('valorTotal') && (
-                  <TableCell className="text-right text-xs font-mono">R$ {brl(g.valorTotal)}</TableCell>
-                )}
-                {visibleCols.has('qtd') && (
-                  <TableCell className="text-right text-xs font-mono">{g.qtdNotas}</TableCell>
-                )}
-                {visibleCols.has('cf') && (
-                  <TableCell>
-                    {g.isConsumidorFinal ? (
-                      <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
-                    )}
-                  </TableCell>
-                )}
-                {visibleCols.has('indFinal') && (
-                  <TableCell className="text-right text-xs font-mono">{g.indFinalCount}</TableCell>
-                )}
-                {visibleCols.has('uf') && (
-                  <TableCell className="text-xs font-mono">{g.ufEnd || g.notas[0]?.ufDestino || '—'}</TableCell>
-                )}
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
 }
 
 // ── CompareView ────────────────────────────────────────────────────────────────
@@ -436,7 +300,7 @@ function CompareView({
               <p className="text-xs text-muted-foreground">Em comum</p>
             </div>
             <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-center min-w-28">
-              <p className="text-xl font-bold text-red-400">{diff.lost.length}</p>
+              <p className="text-xl font-bold text-destructive">{diff.lost.length}</p>
               <p className="text-xs text-muted-foreground">IEs perdidas</p>
             </div>
             {diff.changedToCF.length > 0 && (
@@ -498,7 +362,7 @@ function DiffSection({
   }[color];
   const textColor = {
     green: 'text-green-400',
-    red: 'text-red-400',
+    red: 'text-destructive',
     amber: 'text-amber-400',
     default: 'text-foreground',
   }[color];
@@ -995,7 +859,7 @@ export default function Tabelao() {
                             <p className="text-xs text-muted-foreground mt-0.5">Não Consumidor Final</p>
                             <p className="text-xs text-muted-foreground/60">Elegíveis para incentivo</p>
                           </div>
-                          <Users className="h-5 w-5 text-blue-400/60 shrink-0" />
+                          <Users className="h-5 w-5 text-green-400/60 shrink-0" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1007,7 +871,7 @@ export default function Tabelao() {
                             <p className="text-xs text-muted-foreground mt-0.5">Consumidor Final</p>
                             <p className="text-xs text-muted-foreground/60">indFinal = 1</p>
                           </div>
-                          <Users className="h-5 w-5 text-green-400/60 shrink-0" />
+                          <Users className="h-5 w-5 text-muted-foreground shrink-0" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1019,7 +883,7 @@ export default function Tabelao() {
                             <p className="text-xs text-muted-foreground mt-0.5">UFs Representadas</p>
                             {ufLabel && <p className="text-xs text-muted-foreground/60 truncate max-w-28">{ufLabel}</p>}
                           </div>
-                          <MapPin className="h-5 w-5 text-amber-400/60 shrink-0" />
+                          <MapPin className="h-5 w-5 text-muted-foreground shrink-0" />
                         </div>
                       </CardContent>
                     </Card>
@@ -1245,8 +1109,11 @@ export default function Tabelao() {
                     className="rounded-lg border border-border overflow-auto"
                     style={{ height: 'calc(100vh - 420px)', minHeight: '280px' }}
                   >
-                    <Table>
-                      <TableHeader className="sticky top-0 z-10 bg-background">
+                    {/* overflow-visible: quem rola é o div acima, não o
+                        container interno do Table — sem isto o sticky do
+                        cabeçalho gruda no container errado e some ao rolar. */}
+                    <Table containerClassName="overflow-visible">
+                      <TableHeader className="sticky top-0 z-10 bg-background [&_tr]:border-b [&_tr]:border-border">
                         <TableRow>
                           <TableHead className="cursor-pointer select-none" onClick={() => handleSort('ie')}>
                             IE <SortIcon k="ie" />
@@ -1330,9 +1197,9 @@ export default function Tabelao() {
                                     {visibleCols.has('cf') && (
                                       <TableCell>
                                         {g.isConsumidorFinal ? (
-                                          <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Sim</Badge>
+                                          <Badge variant="outline" className="text-xs text-muted-foreground">Sim</Badge>
                                         ) : (
-                                          <Badge variant="outline" className="text-xs text-muted-foreground">Não</Badge>
+                                          <Badge variant="outline" className="text-xs text-green-500 border-green-500/30">Não</Badge>
                                         )}
                                       </TableCell>
                                     )}

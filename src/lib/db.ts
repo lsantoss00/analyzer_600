@@ -1,5 +1,5 @@
 import Database from '@tauri-apps/plugin-sql';
-import type { Empresa, IeGroup, Lote, MesGroup, MonthStat, NFe, Resumo } from './types';
+import type { Descartes, Empresa, IeGroup, Lote, MesGroup, NFe, Resumo } from './types';
 
 let _db: Database | null = null;
 
@@ -24,6 +24,8 @@ function rowToLote(r: Row): Lote {
     totalArquivos: (r.total_arquivos as number) ?? 0,
     totalValido: (r.total_valido as number) ?? 0,
     resumo: r.resumo ? (JSON.parse(r.resumo as string) as Resumo) : null,
+    // Null nos lotes importados antes da migration v3.
+    descartes: r.descartes ? (JSON.parse(r.descartes as string) as Descartes) : null,
     ordem: (r.ordem as number) ?? 0,
   };
 }
@@ -136,11 +138,6 @@ export async function updateLoteNome(id: string, nome: string): Promise<void> {
   await d.execute('UPDATE lotes SET nome=$1 WHERE id=$2', [nome, id]);
 }
 
-export async function updateLoteOrdem(id: string, ordem: number): Promise<void> {
-  const d = await db();
-  await d.execute('UPDATE lotes SET ordem=$1 WHERE id=$2', [ordem, id]);
-}
-
 export async function deleteLote(id: string): Promise<void> {
   const d = await db();
   await d.execute('DELETE FROM lotes WHERE id=$1', [id]);
@@ -192,21 +189,6 @@ export async function fetchNotasByIe(ieKey: string, loteIds: string[]): Promise<
 // ---------------------------------------------------------------------------
 // Aggregate queries (used by Dashboard)
 // ---------------------------------------------------------------------------
-
-export async function fetchMonthStats(loteId: string): Promise<MonthStat[]> {
-  const d = await db();
-  const rows = await d.select<Row[]>(
-    `SELECT substr(data_emissao, 1, 7) as mes, SUM(v_nf) as valor, COUNT(*) as notas
-     FROM notas WHERE lote_id=$1
-     GROUP BY mes ORDER BY mes`,
-    [loteId],
-  );
-  return rows.map((r) => ({
-    mes: formatMesLabel(r.mes as string),
-    valor: (r.valor as number) ?? 0,
-    notas: (r.notas as number) ?? 0,
-  }));
-}
 
 function formatMesLabel(ym: string): string {
   if (!ym || ym.length < 7) return ym;

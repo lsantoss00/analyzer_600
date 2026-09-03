@@ -1,6 +1,7 @@
 import type { NFe } from '@/lib/types';
 import { Badge } from './ui/badge';
 import { ScrollArea } from './ui/scroll-area';
+import { brl } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -9,10 +10,6 @@ import {
   TableHeader,
   TableRow,
 } from './ui/table';
-
-function brl(v: number) {
-  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 interface Props {
   notas: NFe[];
@@ -48,7 +45,7 @@ export default function NFeTable({ notas }: Props) {
               <TableCell className="text-right font-mono text-xs">{brl(n.vNf)}</TableCell>
               <TableCell className="text-center">
                 {n.indFinal ? (
-                  <Badge variant="outline" className="text-green-600 border-green-200 text-xs px-1">
+                  <Badge variant="outline" className="text-muted-foreground text-xs px-1">
                     Sim
                   </Badge>
                 ) : (

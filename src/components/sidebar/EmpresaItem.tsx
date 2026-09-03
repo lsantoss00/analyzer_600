@@ -99,7 +99,7 @@ export default function EmpresaItem({ empresa }: Props) {
     const selected = await openDialog({ directory: true, multiple: false });
     if (!selected || typeof selected !== 'string') return;
 
-    let paths: string[] = [];
+    let paths: string[];
     try {
       paths = await invoke<string[]>('scan_folder', { path: selected });
     } catch {
@@ -188,20 +188,29 @@ export default function EmpresaItem({ empresa }: Props) {
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
         <span className="flex-1 truncate text-sm font-medium">{empresa.nome}</span>
-        <span className="ml-auto flex opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* O "+" fica SEMPRE visível: criar lote é o caminho principal do app e
+            ficava escondido atrás do hover, num alvo de 20x20 — enquanto o
+            onboarding mandava clicar exatamente nele. Editar e excluir seguem
+            no hover: são ações destrutivas/secundárias. */}
+        <span className="ml-auto flex items-center">
           <Button
             variant="ghost"
             size="icon"
-            className="h-5 w-5"
-            title="Novo lote"
+            className="h-6 w-6"
+            title="Importar XMLs para um novo lote"
+            aria-label="Importar XMLs para um novo lote"
             onClick={(e) => { e.stopPropagation(); handlePickFolder(); }}
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3.5 w-3.5" />
           </Button>
+        </span>
+        <span className="flex opacity-0 group-hover:opacity-100 transition-opacity">
           <Button
             variant="ghost"
             size="icon"
             className="h-5 w-5"
+            title="Editar empresa"
+            aria-label="Editar empresa"
             onClick={(e) => { e.stopPropagation(); setNome(empresa.nome); setCnpj(empresa.cnpj); setEditOpen(true); }}
           >
             <Pencil className="h-3 w-3" />
@@ -210,6 +219,8 @@ export default function EmpresaItem({ empresa }: Props) {
             variant="ghost"
             size="icon"
             className="h-5 w-5 hover:text-destructive"
+            title="Excluir empresa"
+            aria-label="Excluir empresa"
             onClick={(e) => {
               e.stopPropagation();
               setDeleteConfirmText('');
@@ -300,7 +311,7 @@ export default function EmpresaItem({ empresa }: Props) {
                   </div>
                   <span className="text-sm font-mono">{Math.round(pct)}%</span>
                 </div>
-                <Progress value={pct} className="h-2" />
+                <Progress value={pct} trackClassName="h-2" />
               </div>
             </>
           )}
