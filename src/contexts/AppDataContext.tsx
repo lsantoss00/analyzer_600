@@ -211,6 +211,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       totalValido: 0,
       resumo: null,
       descartes: null,
+      duracoes: null,
       ordem,
     };
     dispatch({

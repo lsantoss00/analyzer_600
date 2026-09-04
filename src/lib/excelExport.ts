@@ -1,9 +1,36 @@
 import * as XLSX from 'xlsx';
 import { buildIeGroups } from './db';
 import type { IeComparison } from './db';
-import type { IeGroup, NFe } from './types';
+import type { IeGroup, NFeCompleta } from './types';
 
-function sheetNotas(notas: NFe[]): XLSX.WorkSheet {
+/** Limite de caracteres por célula no formato xlsx. */
+const MAX_CELULA = 32767;
+
+/**
+ * Junta as chaves respeitando o limite da célula. Uma IE com mais de ~728 notas
+ * estourava o limite e o Excel abria o arquivo corrompido, sem avisar ninguém.
+ */
+function juntarChaves(chaves: string[]): string {
+  const texto = chaves.join(';');
+  if (texto.length <= MAX_CELULA) return texto;
+
+  const aviso = `… (+N de ${chaves.length} — ver aba Lista de Notas)`;
+  let corte = 0;
+  let usadas = 0;
+  for (const c of chaves) {
+    const proximo = corte === 0 ? c.length : corte + 1 + c.length;
+    if (proximo + aviso.length > MAX_CELULA) break;
+    corte = proximo;
+    usadas++;
+  }
+  return (
+    texto.slice(0, corte) +
+    `… (+${chaves.length - usadas} de ${chaves.length} — ver aba Lista de Notas)`
+  );
+}
+
+/** Única planilha que precisa dos campos completos da nota. */
+function sheetNotas(notas: NFeCompleta[]): XLSX.WorkSheet {
   const rows = notas.map((n) => ({
     'Chave NF-e': n.chave,
     'Data Emissão': n.dataEmissao,
@@ -35,7 +62,7 @@ function sheetIes(groups: IeGroup[]): XLSX.WorkSheet {
     'Município': g.municipio,
     'Chave NF-e 1 (maior valor)': g.chaveNfe1,
     'Valor da Nota (R$)': g.valorNfe1,
-    'Chaves NF-e (todas)': g.notas.map((n) => n.chave).join(';'),
+    'Chaves NF-e (todas)': juntarChaves(g.notas.map((n) => n.chave)),
     'Valor Total (R$)': g.valorTotal,
     'Cons. Final': g.isConsumidorFinal ? 'Sim' : 'Não',
     'Qtd Notas': g.qtdNotas,
@@ -99,8 +126,8 @@ export function generateCompareExcelBytes(diff: IeComparison): Uint8Array {
   return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
 }
 
-export function generateExcelBytes(notas: NFe[]): Uint8Array {
-  const groups = buildIeGroups(notas);
+export function generateExcelBytes(notas: NFeCompleta[], gruposProntos?: IeGroup[]): Uint8Array {
+  const groups = gruposProntos ?? buildIeGroups(notas);
   const wb = XLSX.utils.book_new();
 
   const wsNotas = sheetNotas(notas);

@@ -27,26 +27,31 @@ pub struct NfeParsed {
     pub uf_end: String,
 }
 
+/// Tenta primeiro os filhos diretos e só então a subárvore inteira.
+///
+/// Pelo layout da NF-e 4.00 todo campo que lemos é filho direto do seu bloco
+/// (nNF de ide, CNPJ de emit, UF de enderDest), e antes cada um deles percorria
+/// a subárvore completa. O fallback existe porque só temos XMLs sintéticos para
+/// testar: se algum emissor aninhar diferente, o comportamento não muda — só
+/// deixa de ser rápido naquele campo.
 fn find_text<'a>(node: roxmltree::Node<'a, '_>, local_name: &str) -> Option<String> {
-    node.descendants()
+    let achado = node
+        .children()
         .find(|n| n.is_element() && n.tag_name().name() == local_name)
-        .and_then(|n| n.text())
-        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            node.descendants()
+                .find(|n| n.is_element() && n.tag_name().name() == local_name)
+        })?;
+    achado.text().map(|s| s.trim().to_string())
 }
 
-fn find_text_in<'a>(
-    node: roxmltree::Node<'a, '_>,
-    parent: &str,
-    child: &str,
-) -> Option<String> {
+/// Localiza um elemento em qualquer profundidade. Usado uma vez por bloco.
+fn find_node<'a, 'i>(
+    node: roxmltree::Node<'a, 'i>,
+    local_name: &str,
+) -> Option<roxmltree::Node<'a, 'i>> {
     node.descendants()
-        .find(|n| n.is_element() && n.tag_name().name() == parent)
-        .and_then(|p| {
-            p.children()
-                .find(|n| n.is_element() && n.tag_name().name() == child)
-                .and_then(|n| n.text())
-                .map(|s| s.trim().to_string())
-        })
+        .find(|n| n.is_element() && n.tag_name().name() == local_name)
 }
 
 fn parse_f64(s: &str) -> f64 {
@@ -65,8 +70,8 @@ fn parse_date(raw: &str) -> String {
     }
 }
 
-pub fn parse_nfe(xml: &str) -> Option<NfeParsed> {
-    let doc = roxmltree::Document::parse(xml).ok()?;
+/// Recebe o Document já construído — ver o comentário em parse_evento.
+pub fn parse_nfe(doc: &roxmltree::Document) -> Option<NfeParsed> {
     let root = doc.root_element();
 
     // Locate infNFe — works whether root is <NFe> or <nfeProc>
@@ -142,19 +147,18 @@ pub fn parse_nfe(xml: &str) -> Option<NfeParsed> {
         .map(|s| s.trim().to_string())
         .unwrap_or_default();
 
-    // totals
-    let v_nf = find_text_in(inf_nfe, "ICMSTot", "vNF")
-        .map(|s| parse_f64(&s))
-        .unwrap_or(0.0);
-    let v_prod = find_text_in(inf_nfe, "ICMSTot", "vProd")
-        .map(|s| parse_f64(&s))
-        .unwrap_or(0.0);
-    let v_icms = find_text_in(inf_nfe, "ICMSTot", "vICMS")
-        .map(|s| parse_f64(&s))
-        .unwrap_or(0.0);
-    let v_st = find_text_in(inf_nfe, "ICMSTot", "vST")
-        .map(|s| parse_f64(&s))
-        .unwrap_or(0.0);
+    // ICMSTot localizado UMA vez; os quatro campos saem dos filhos dele.
+    let icms_tot = find_node(inf_nfe, "ICMSTot");
+    let total_f64 = |campo: &str| -> f64 {
+        icms_tot
+            .and_then(|t| find_text(t, campo))
+            .map(|s| parse_f64(&s))
+            .unwrap_or(0.0)
+    };
+    let v_nf = total_f64("vNF");
+    let v_prod = total_f64("vProd");
+    let v_icms = total_f64("vICMS");
+    let v_st = total_f64("vST");
 
     Some(NfeParsed {
         id: uuid::Uuid::new_v4().to_string(),

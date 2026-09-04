@@ -5,9 +5,11 @@ const CANCEL_EVENTS: &[&str] = &[
     "110114", // NF-e não realizada (treated as cancelled)
 ];
 
-/// Returns the chave of the nota if this XML is a cancellation evento, None otherwise.
-pub fn parse_evento(xml: &str) -> Option<String> {
-    let doc = roxmltree::Document::parse(xml).ok()?;
+/// Devolve a chave da nota se este XML for um evento de cancelamento.
+///
+/// Recebe o Document já construído: antes esta função montava o DOM só para
+/// descobrir que o arquivo não era um evento, e o parse_nfe montava tudo de novo.
+pub fn parse_evento(doc: &roxmltree::Document) -> Option<String> {
     let root = doc.root_element();
 
     let inf_evento = root

@@ -65,6 +65,21 @@ pub struct Descartes {
     pub eventos: usize,
 }
 
+/// Tempo de cada fase do import, em milissegundos. Sem isto não havia como
+/// atribuir o tempo: o evento de progresso só cobre o parse e para de emitir
+/// antes da gravação, justamente a fase silenciosa.
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Duracoes {
+    #[serde(rename = "parseMs")]
+    pub parse_ms: u64,
+    #[serde(rename = "dedupMs")]
+    pub dedup_ms: u64,
+    #[serde(rename = "gravacaoMs")]
+    pub gravacao_ms: u64,
+    #[serde(rename = "totalMs")]
+    pub total_ms: u64,
+}
+
 enum ParseResult {
     NFe(NfeParsed),
     Evento(String), // cancelled chave
@@ -98,21 +113,34 @@ fn parse_xml_file(path: &str) -> ParseResult {
         Err(e) => e.into_bytes().iter().map(|&b| b as char).collect::<String>(),
     };
 
-    // Try evento first (smaller/faster check)
-    if let Some(chave) = parse_evento(&xml) {
+    // UM parse por arquivo. Antes parse_evento e parse_nfe montavam cada um o
+    // seu Document da mesma string: para uma NF-e — o caso normal — o primeiro
+    // montava a árvore inteira, varria tudo atrás de infEvento, não achava, e
+    // descartava; o segundo remontava. Era metade do trabalho de parse jogada
+    // fora, numa fase que responde por 91% do tempo de import.
+    let doc = match roxmltree::Document::parse(&xml) {
+        Ok(d) => d,
+        Err(_) => return ParseResult::Skip(MotivoDescarte::XmlInvalido),
+    };
+
+    if let Some(chave) = parse_evento(&doc) {
         return ParseResult::Evento(chave);
     }
 
-    if let Some(nfe) = parse_nfe(&xml) {
+    if let Some(nfe) = parse_nfe(&doc) {
         return ParseResult::NFe(nfe);
     }
 
-    // parse_nfe devolve None tanto para XML corrompido quanto para documento que
-    // simplesmente não é NF-e. Separar os dois importa: "não é NF-e" costuma ser
-    // pasta com outros documentos, "XML inválido" é arquivo problemático.
-    // Checagem por substring para não montar o DOM uma terceira vez; um arquivo
-    // corrompido sem a string cai em NaoEhNfe, imprecisão aceitável aqui.
-    if xml.contains("infNFe") {
+    // Agora a classificação é exata: o XML é bem-formado (senão teria caído no
+    // Err acima), então ou tem infNFe e algum bloco obrigatório falta, ou não é
+    // NF-e. Antes isto era uma checagem por substring, imprecisa de propósito
+    // para evitar um terceiro parse.
+    let tem_inf_nfe = doc
+        .root_element()
+        .descendants()
+        .any(|n| n.is_element() && n.tag_name().name() == "infNFe");
+
+    if tem_inf_nfe {
         ParseResult::Skip(MotivoDescarte::XmlInvalido)
     } else {
         ParseResult::Skip(MotivoDescarte::NaoEhNfe)
@@ -150,6 +178,7 @@ fn process_files_sync(
     lote_id: String,
     xml_paths: Vec<String>,
 ) -> Result<Resumo, String> {
+    let t_inicio = std::time::Instant::now();
     let total = xml_paths.len();
     let counter = Arc::new(AtomicUsize::new(0));
     let app_arc = Arc::new(app);
@@ -166,6 +195,9 @@ fn process_files_sync(
             result
         })
         .collect();
+    let parse_ms = t_inicio.elapsed().as_millis() as u64;
+
+    let t_dedup = std::time::Instant::now();
 
     // Separate NF-es from cancelled chaves
     let mut cancelled: HashSet<String> = HashSet::new();
@@ -194,23 +226,25 @@ fn process_files_sync(
     let mut seen_chaves: HashSet<String> = HashSet::new();
     let mut valid: Vec<NfeParsed> = Vec::with_capacity(nfes.len());
     for n in nfes {
-        // Avaliadas em separado: com `a && b` o curto-circuito impedia que uma
-        // nota cancelada fosse também contabilizada como duplicada, e os números
-        // não fechavam contra total_arquivos.
-        let cancelada = !is_valid_nfe(&n, &cancelled);
+        // UM balde por ARQUIVO, nunca dois. Contar as condições em separado
+        // fazia uma nota cancelada que aparece duas vezes somar 2 em
+        // "cancelados" mais 1 em "duplicados" — 3 para 2 arquivos, e a soma
+        // não fechava contra total_arquivos. A segunda cópia é, antes de tudo,
+        // uma duplicata; a primeira é que foi cancelada.
         let nova_chave = seen_chaves.insert(n.chave.clone());
-        if cancelada {
-            descartes.cancelados += 1;
-        }
         if !nova_chave {
             descartes.duplicados += 1;
-        }
-        if !cancelada && nova_chave {
+        } else if !is_valid_nfe(&n, &cancelled) {
+            descartes.cancelados += 1;
+        } else {
             valid.push(n);
         }
     }
 
     let resumo = compute_resumo(&valid);
+    let dedup_ms = t_dedup.elapsed().as_millis() as u64;
+
+    let t_gravacao = std::time::Instant::now();
 
     // Batch write to SQLite
     let mut conn = rusqlite::Connection::open(&db_path).map_err(|e| e.to_string())?;
@@ -228,10 +262,15 @@ fn process_files_sync(
     tx.execute("DELETE FROM notas WHERE lote_id=?1", rusqlite::params![&lote_id])
         .map_err(|e| e.to_string())?;
 
+    // prepare_cached uma vez, fora do loop. tx.execute(sql, ...) chama
+    // Connection::prepare a cada volta (rusqlite lib.rs:623), então o INSERT de
+    // 22 placeholders era recompilado pelo SQLite uma vez por nota — 80 mil
+    // vezes num lote grande. O cache usa SQLITE_PREPARE_PERSISTENT.
     let mut inseridas = 0usize;
-    for n in &valid {
-        let n_linhas = tx.execute(
-            "INSERT OR IGNORE INTO notas (
+    {
+        let mut stmt = tx
+            .prepare_cached(
+                "INSERT OR IGNORE INTO notas (
                 id, lote_id, chave, data_emissao, cfop, uf_destino,
                 ie_dest, cnpj_dest, x_nome, ind_final, n_nf, mod_nf, serie,
                 v_nf, v_prod, v_icms, v_st, cnpj_emit, x_nome_emit,
@@ -240,18 +279,23 @@ fn process_files_sync(
                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,
                 ?14,?15,?16,?17,?18,?19,?20,?21,?22
             )",
-            rusqlite::params![
-                n.id, &lote_id, n.chave, n.data_emissao, n.cfop, n.uf_destino,
-                n.ie_dest, n.cnpj_dest, n.x_nome, n.ind_final as i32,
-                n.n_nf, n.mod_nf, n.serie,
-                n.v_nf, n.v_prod, n.v_icms, n.v_st,
-                n.cnpj_emit, n.x_nome_emit, n.natureza_operacao,
-                n.municipio, n.uf_end,
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-        // total_valido era valid.len(), que SUPER-reporta se o OR IGNORE dispara.
-        inseridas += n_linhas;
+            )
+            .map_err(|e| e.to_string())?;
+
+        for n in &valid {
+            let n_linhas = stmt
+                .execute(rusqlite::params![
+                    n.id, &lote_id, n.chave, n.data_emissao, n.cfop, n.uf_destino,
+                    n.ie_dest, n.cnpj_dest, n.x_nome, n.ind_final as i32,
+                    n.n_nf, n.mod_nf, n.serie,
+                    n.v_nf, n.v_prod, n.v_icms, n.v_st,
+                    n.cnpj_emit, n.x_nome_emit, n.natureza_operacao,
+                    n.municipio, n.uf_end,
+                ])
+                .map_err(|e| e.to_string())?;
+            // total_valido era valid.len(), que SUPER-reporta se o OR IGNORE dispara.
+            inseridas += n_linhas;
+        }
     }
     descartes.ja_existiam = valid.len() - inseridas;
 
@@ -264,6 +308,26 @@ fn process_files_sync(
     .map_err(|e| e.to_string())?;
 
     tx.commit().map_err(|e| e.to_string())?;
+
+    let duracoes = Duracoes {
+        parse_ms,
+        dedup_ms,
+        gravacao_ms: t_gravacao.elapsed().as_millis() as u64,
+        total_ms: t_inicio.elapsed().as_millis() as u64,
+    };
+    // Gravado fora da transação: é diagnóstico, não pode derrubar o import.
+    let _ = conn.execute(
+        "UPDATE lotes SET duracoes=?1 WHERE id=?2",
+        rusqlite::params![
+            serde_json::to_string(&duracoes).unwrap_or_default(),
+            &lote_id
+        ],
+    );
+
+    eprintln!(
+        "[import] {} arquivos | parse {}ms | dedup {}ms | gravacao {}ms | total {}ms",
+        total, duracoes.parse_ms, duracoes.dedup_ms, duracoes.gravacao_ms, duracoes.total_ms
+    );
 
     Ok(resumo)
 }
@@ -325,4 +389,5 @@ pub async fn process_lote(
     .await
     .map_err(|e| e.to_string())?
 }
+
 

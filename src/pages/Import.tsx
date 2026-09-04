@@ -312,6 +312,14 @@ export default function Import() {
               <Badge variant="secondary">
                 de {activeLote.totalArquivos.toLocaleString('pt-BR')} arquivos
               </Badge>
+              {activeLote.duracoes && (
+                <Badge
+                  variant="secondary"
+                  title={`parse ${activeLote.duracoes.parseMs}ms · dedup ${activeLote.duracoes.dedupMs}ms · gravação ${activeLote.duracoes.gravacaoMs}ms`}
+                >
+                  importado em {(activeLote.duracoes.totalMs / 1000).toFixed(1)}s
+                </Badge>
+              )}
               {filteredStats && filteredStats.notasTotais !== activeLote.totalValido && (
                 <Badge variant="outline" className="text-blue-400 border-blue-400/30">
                   {filteredStats.notasTotais.toLocaleString('pt-BR')} pelas regras atuais

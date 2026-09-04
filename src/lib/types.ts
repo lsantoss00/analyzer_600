@@ -1,3 +1,8 @@
+/**
+ * O que as telas usam. Sete das 22 colunas de `notas` não aparecem em tela
+ * nenhuma — seis são exclusivas do Excel e `mod_nf` não é lida em lugar algum —
+ * e hidratá-las em toda carga custava payload à toa. Ver NFeCompleta.
+ */
 export interface NFe {
   id: string;
   loteId: string;
@@ -10,17 +15,20 @@ export interface NFe {
   xNome: string;
   indFinal: boolean;
   nNf: string;
-  modNf: string;
   serie: string;
   vNf: number;
+  municipio: string;
+  ufEnd: string;
+}
+
+/** Acrescenta os campos que só a aba "Lista de Notas" do Excel consome. */
+export interface NFeCompleta extends NFe {
   vProd: number;
   vIcms: number;
   vSt: number;
   cnpjEmit: string;
   xNomeEmit: string;
   naturezaOperacao: string;
-  municipio: string;
-  ufEnd: string;
 }
 
 export interface Resumo {
@@ -47,6 +55,14 @@ export interface Descartes {
   eventos: number;
 }
 
+/** Tempo de cada fase do import, em ms. Null nos lotes anteriores à v4. */
+export interface Duracoes {
+  parseMs: number;
+  dedupMs: number;
+  gravacaoMs: number;
+  totalMs: number;
+}
+
 export interface Lote {
   id: string;
   empresaId: string;
@@ -57,6 +73,7 @@ export interface Lote {
   totalValido: number;
   resumo: Resumo | null;
   descartes: Descartes | null;
+  duracoes: Duracoes | null;
   ordem: number;
 }
 

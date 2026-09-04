@@ -49,11 +49,11 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAppData } from '@/contexts/AppDataContext';
-import { buildIeGroups, compareIeGroups, fetchNotasByLotes } from '@/lib/db';
+import { buildIeGroups, compareIeGroups, fetchNotasByLotes, fetchNotasCompletasByLotes } from '@/lib/db';
 import { applyNotaRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
 import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
-import { generateCompareExcelBytes, generateExcelBytes } from '@/lib/excelExport';
+import { gerarExcelComparacao, gerarExcelTabelao } from '@/lib/excelClient';
 import { generatePdfBytes, type PdfMode } from '@/lib/pdfExport';
 import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
 import { brl, formatCnpj, formatDate } from '@/lib/utils';
@@ -190,6 +190,7 @@ function CompareView({
 
   const hasSelection = loteIdsA.length > 0 && loteIdsB.length > 0;
   const loading = loadingA || loadingB;
+  const [exportando, setExportando] = useState(false);
 
   async function exportarComparacao() {
     const savePath = await save({
@@ -197,14 +198,18 @@ function CompareView({
       defaultPath: 'comparacao-ies.xlsx',
     });
     if (!savePath) return;
+    setExportando(true);
     try {
-      await writeFile(savePath, generateCompareExcelBytes(diff));
+      const bytes = await gerarExcelComparacao(diff);
+      await writeFile(savePath, bytes);
       toast.success(
         `Excel: ${diff.gained.length} ganhas, ${diff.lost.length} perdidas, ${diff.common.length} em comum`,
       );
     } catch (err) {
       console.error(err);
       toast.error(`Erro ao exportar a comparação: ${String(err)}`);
+    } finally {
+      setExportando(false);
     }
   }
 
@@ -281,11 +286,17 @@ function CompareView({
               size="sm"
               onClick={exportarComparacao}
               disabled={
+                exportando ||
                 diff.gained.length + diff.lost.length +
                 diff.common.length + diff.changedToCF.length === 0
               }
             >
-              <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Excel da comparação
+              {exportando ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {exportando ? 'Gerando...' : 'Excel da comparação'}
             </Button>
           </div>
 
@@ -527,6 +538,14 @@ export default function Tabelao() {
 
   // ── filters & sort ──────────────────────────────────────────────────────────
   const [search, setSearch] = useState('');
+  // O input continua respondendo a cada tecla; só o filtro espera. Sem isto,
+  // cada tecla refazia o filtro sobre TODOS os grupos — e o pior caso varre
+  // todas as notas do conjunto procurando a chave.
+  const [searchDebounced, setSearchDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search), 200);
+    return () => clearTimeout(t);
+  }, [search]);
   const [cfFilter, setCfFilter] = useState<'all' | 'cf' | 'ncf'>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -576,8 +595,8 @@ export default function Tabelao() {
 
   const filteredGroups: IeGroup[] = useMemo(() => {
     let g = allGroups;
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    if (searchDebounced.trim()) {
+      const q = searchDebounced.toLowerCase();
       const qDigits = q.replace(/\D/g, '');
       g = g.filter(
         (ie) =>
@@ -599,7 +618,7 @@ export default function Tabelao() {
         ? String(av).localeCompare(String(bv))
         : String(bv).localeCompare(String(av));
     });
-  }, [allGroups, search, cfFilter, sortKey, sortDir]);
+  }, [allGroups, searchDebounced, cfFilter, sortKey, sortDir]);
 
   // ── derived stats ───────────────────────────────────────────────────────────
   const ufsSet = useMemo(
@@ -679,13 +698,32 @@ export default function Tabelao() {
     valorTotal: notasFiltradas.reduce((s, n) => s + n.vNf, 0),
   }), [notasFiltradas, filteredGroups]);
 
+  // A montagem roda num Worker: com 80 mil notas são ~1,4 milhão de células e
+  // antes isso congelava a janela, sem spinner e com o botão ainda clicável.
+  const [exportandoExcel, setExportandoExcel] = useState(false);
+
   async function exportExcel() {
     const savePath = await save({ filters: [{ name: 'Excel', extensions: ['xlsx'] }], defaultPath: 'relatorio-nfe.xlsx' });
     if (!savePath) return;
+    setExportandoExcel(true);
     try {
-      await writeFile(savePath, generateExcelBytes(notasFiltradas));
+      // As telas carregam só as 15 colunas que usam; a aba "Lista de Notas"
+      // precisa das 22. Buscar aqui e cruzar pelos ids já filtrados evita
+      // reimplementar regras, data, CF e busca — e evita pagar essas 7 colunas
+      // em toda carga de tela.
+      const idsFiltrados = new Set(notasFiltradas.map((n) => n.id));
+      const completas = await fetchNotasCompletasByLotes(selectedLoteIds);
+      const notasExport = completas.filter((n) => idsFiltrados.has(n.id));
+
+      const bytes = await gerarExcelTabelao(notasExport, filteredGroups);
+      await writeFile(savePath, bytes);
       toast.success(`Excel: ${filteredGroups.length} IEs, ${notasFiltradas.length} notas`);
-    } catch { toast.error('Erro ao exportar Excel'); }
+    } catch (err) {
+      console.error(err);
+      toast.error(`Erro ao exportar Excel: ${String(err)}`);
+    } finally {
+      setExportandoExcel(false);
+    }
   }
 
   // O PDF antes saía só com KPIs — nenhuma IE — apesar de vir de uma tela
@@ -778,8 +816,18 @@ export default function Tabelao() {
             </Button>
             {!compareMode && (
               <>
-                <Button variant="outline" size="sm" onClick={exportExcel} disabled={notasFiltradas.length === 0}>
-                  <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" /> Excel
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportExcel}
+                  disabled={exportandoExcel || notasFiltradas.length === 0}
+                >
+                  {exportandoExcel ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  {exportandoExcel ? 'Gerando...' : 'Excel'}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)} disabled={notasFiltradas.length === 0}>
                   <FileText className="h-3.5 w-3.5 mr-1.5" /> PDF
@@ -1147,7 +1195,7 @@ export default function Tabelao() {
                           const paddingBottom = totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0);
                           return (
                             <>
-                              {paddingTop > 0 && <tr style={{ height: paddingTop }}><td /></tr>}
+                              {paddingTop > 0 && <tr style={{ height: paddingTop }}><td colSpan={2 + visibleCols.size} /></tr>}
                               {virtualItems.map((vRow) => {
                                 const g = filteredGroups[vRow.index];
                                 return (
@@ -1212,7 +1260,7 @@ export default function Tabelao() {
                                   </TableRow>
                                 );
                               })}
-                              {paddingBottom > 0 && <tr style={{ height: paddingBottom }}><td /></tr>}
+                              {paddingBottom > 0 && <tr style={{ height: paddingBottom }}><td colSpan={2 + visibleCols.size} /></tr>}
                             </>
                           );
                         })()}

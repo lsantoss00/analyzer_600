@@ -1,5 +1,5 @@
 import Database from '@tauri-apps/plugin-sql';
-import type { Descartes, Empresa, IeGroup, Lote, MesGroup, NFe, Resumo } from './types';
+import type { Descartes, Duracoes, Empresa, IeGroup, Lote, MesGroup, NFe, NFeCompleta, Resumo } from './types';
 
 let _db: Database | null = null;
 
@@ -26,9 +26,15 @@ function rowToLote(r: Row): Lote {
     resumo: r.resumo ? (JSON.parse(r.resumo as string) as Resumo) : null,
     // Null nos lotes importados antes da migration v3.
     descartes: r.descartes ? (JSON.parse(r.descartes as string) as Descartes) : null,
+    duracoes: r.duracoes ? (JSON.parse(r.duracoes as string) as Duracoes) : null,
     ordem: (r.ordem as number) ?? 0,
   };
 }
+
+/** Colunas que as telas realmente usam. Projeção explícita em vez de SELECT *. */
+const COLUNAS_TELA =
+  'id, lote_id, chave, data_emissao, cfop, uf_destino, ie_dest, cnpj_dest, ' +
+  'x_nome, ind_final, n_nf, serie, v_nf, municipio, uf_end';
 
 function rowToNfe(r: Row): NFe {
   return {
@@ -43,17 +49,22 @@ function rowToNfe(r: Row): NFe {
     xNome: r.x_nome as string,
     indFinal: (r.ind_final as number) === 1,
     nNf: r.n_nf as string,
-    modNf: r.mod_nf as string,
     serie: r.serie as string,
     vNf: (r.v_nf as number) ?? 0,
+    municipio: r.municipio as string,
+    ufEnd: r.uf_end as string,
+  };
+}
+
+function rowToNfeCompleta(r: Row): NFeCompleta {
+  return {
+    ...rowToNfe(r),
     vProd: (r.v_prod as number) ?? 0,
     vIcms: (r.v_icms as number) ?? 0,
     vSt: (r.v_st as number) ?? 0,
     cnpjEmit: r.cnpj_emit as string,
     xNomeEmit: r.x_nome_emit as string,
     naturezaOperacao: r.natureza_operacao as string,
-    municipio: r.municipio as string,
-    ufEnd: r.uf_end as string,
   };
 }
 
@@ -149,7 +160,10 @@ export async function deleteLote(id: string): Promise<void> {
 
 export async function fetchNotas(loteId: string): Promise<NFe[]> {
   const d = await db();
-  const rows = await d.select<Row[]>('SELECT * FROM notas WHERE lote_id=$1', [loteId]);
+  const rows = await d.select<Row[]>(
+    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id=$1`,
+    [loteId],
+  );
   return rows.map(rowToNfe);
 }
 
@@ -158,10 +172,25 @@ export async function fetchNotasByLotes(loteIds: string[]): Promise<NFe[]> {
   const d = await db();
   const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
   const rows = await d.select<Row[]>(
-    `SELECT * FROM notas WHERE lote_id IN (${placeholders})`,
+    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id IN (${placeholders})`,
     loteIds,
   );
   return rows.map(rowToNfe);
+}
+
+/**
+ * Todas as colunas, inclusive as seis que só o Excel usa. Disparada apenas na
+ * hora de exportar — nas telas isso seria payload jogado fora.
+ */
+export async function fetchNotasCompletasByLotes(loteIds: string[]): Promise<NFeCompleta[]> {
+  if (loteIds.length === 0) return [];
+  const d = await db();
+  const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
+  const rows = await d.select<Row[]>(
+    `SELECT * FROM notas WHERE lote_id IN (${placeholders})`,
+    loteIds,
+  );
+  return rows.map(rowToNfeCompleta);
 }
 
 /**
@@ -178,7 +207,7 @@ export async function fetchNotasByIe(ieKey: string, loteIds: string[]): Promise<
   const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
   const ieParam = `$${loteIds.length + 1}`;
   const rows = await d.select<Row[]>(
-    `SELECT * FROM notas
+    `SELECT ${COLUNAS_TELA} FROM notas
       WHERE lote_id IN (${placeholders})
         AND (ie_dest = ${ieParam} OR (ie_dest = '' AND cnpj_dest = ${ieParam}))`,
     [...loteIds, ieKey],
@@ -212,8 +241,22 @@ export function buildIeGroups(notas: NFe[], valorMinimoIe = 0): IeGroup[] {
 
   const groups: IeGroup[] = [];
   for (const [ie, ns] of map.entries()) {
-    const sorted = [...ns].sort((a, b) => b.vNf - a.vNf);
-    const top = sorted[0];
+    // Uma passada por grupo. Antes eram seis: um [...ns].sort() (cópia rasa do
+    // conjunto inteiro, só para ler sorted[0]), mais reduce, every, reduce e um
+    // filter que alocava um array descartável só para contar.
+    let valorTotal = 0;
+    let top = ns[0];
+    let todasCf = true;
+    let indFinalCount = 0;
+    let dataEmissaoLatest = '';
+    for (const n of ns) {
+      valorTotal += n.vNf;
+      if (n.vNf > top.vNf) top = n;
+      if (n.indFinal) indFinalCount++;
+      else todasCf = false;
+      if (n.dataEmissao > dataEmissaoLatest) dataEmissaoLatest = n.dataEmissao;
+    }
+
     groups.push({
       ie,
       cnpjDest: ns[0].cnpjDest,
@@ -221,13 +264,13 @@ export function buildIeGroups(notas: NFe[], valorMinimoIe = 0): IeGroup[] {
       municipio: ns[0].municipio,
       ufEnd: ns[0].ufEnd ?? '',
       notas: ns,
-      valorTotal: ns.reduce((s, n) => s + n.vNf, 0),
+      valorTotal,
       chaveNfe1: top.chave,
       valorNfe1: top.vNf,
-      isConsumidorFinal: ns.every((n) => n.indFinal),
+      isConsumidorFinal: todasCf,
       qtdNotas: ns.length,
-      dataEmissaoLatest: ns.reduce((max, n) => (n.dataEmissao > max ? n.dataEmissao : max), ''),
-      indFinalCount: ns.filter((n) => n.indFinal).length,
+      dataEmissaoLatest,
+      indFinalCount,
     });
   }
 

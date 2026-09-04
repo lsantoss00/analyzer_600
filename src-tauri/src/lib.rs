@@ -90,6 +90,27 @@ fn migrations() -> Vec<tauri_plugin_sql::Migration> {
             ALTER TABLE lotes ADD COLUMN descartes TEXT DEFAULT NULL;
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    tauri_plugin_sql::Migration {
+        version: 4,
+        description: "add_lote_duracoes",
+        sql: "
+            ALTER TABLE lotes ADD COLUMN duracoes TEXT DEFAULT NULL;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    // Nenhuma query filtra por cfop, uf_destino ou x_nome — CFOP e UF são
+    // aplicados no frontend. Estes três índices só custavam escrita a cada
+    // insert. Se a busca um dia for para o SQL, voltam numa versão nova.
+    tauri_plugin_sql::Migration {
+        version: 5,
+        description: "drop_unused_nota_indexes",
+        sql: "
+            DROP INDEX IF EXISTS idx_notas_lote_cfop_uf;
+            DROP INDEX IF EXISTS idx_notas_xnome;
+            DROP INDEX IF EXISTS idx_notas_ie_cnpj;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
     }]
 }
 

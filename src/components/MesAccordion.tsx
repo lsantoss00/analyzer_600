@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { buildMesGroups } from '@/lib/db';
 import type { NFe } from '@/lib/types';
 import {
@@ -15,7 +16,9 @@ interface Props {
 }
 
 export default function MesAccordion({ notas }: Props) {
-  const groups = buildMesGroups(notas);
+  // Sem memo isto refazia 4 passadas sobre TODAS as notas do lote a cada render
+  // do pai — inclusive em renders que não têm nada a ver com a lista.
+  const groups = useMemo(() => buildMesGroups(notas), [notas]);
 
   return (
     <Accordion multiple className="space-y-2">
