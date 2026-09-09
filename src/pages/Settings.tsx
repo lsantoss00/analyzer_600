@@ -162,7 +162,7 @@ export default function Settings() {
             <Separator />
             <div className="flex justify-between">
               <span className="text-muted-foreground">Versão</span>
-              <span className="font-medium">0.1.0</span>
+              <span className="font-medium">{__APP_VERSION__}</span>
             </div>
             <Separator />
             <div className="flex justify-between">
