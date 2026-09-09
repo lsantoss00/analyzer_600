@@ -30,6 +30,18 @@ function juntarChaves(chaves: string[]): string {
 }
 
 /** Única planilha que precisa dos campos completos da nota. */
+/**
+ * XLSX.write com type:'array' devolve ArrayBuffer, não Uint8Array — o cast
+ * anterior era falso. Normalizar aqui garante que quem transfere o buffer
+ * para outra thread tenha um .buffer válido.
+ */
+function paraBytes(saida: unknown): Uint8Array {
+  if (saida instanceof Uint8Array) return saida;
+  if (saida instanceof ArrayBuffer) return new Uint8Array(saida);
+  // type:'array' também pode cair num array de bytes puro em runtimes antigos.
+  return new Uint8Array(saida as ArrayLike<number>);
+}
+
 function sheetNotas(notas: NFeCompleta[]): XLSX.WorkSheet {
   const rows = notas.map((n) => ({
     'Chave NF-e': n.chave,
@@ -123,7 +135,7 @@ export function generateCompareExcelBytes(diff: IeComparison): Uint8Array {
   XLSX.utils.book_append_sheet(wb, sheetDiff(diff.lost), 'IEs perdidas');
   XLSX.utils.book_append_sheet(wb, sheetDiff(diff.changedToCF), 'Viraram CF');
   XLSX.utils.book_append_sheet(wb, sheetDiff(diff.common), 'Em comum');
-  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+  return paraBytes(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
 }
 
 export function generateExcelBytes(notas: NFeCompleta[], gruposProntos?: IeGroup[]): Uint8Array {
@@ -149,5 +161,5 @@ export function generateExcelBytes(notas: NFeCompleta[], gruposProntos?: IeGroup
   XLSX.utils.book_append_sheet(wb, wsNotas, 'Lista de Notas');
   XLSX.utils.book_append_sheet(wb, wsIes, 'IEs Distintas');
 
-  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+  return paraBytes(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
 }

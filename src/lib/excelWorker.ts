@@ -24,9 +24,13 @@ self.onmessage = (e: MessageEvent<PedidoExcel>) => {
       e.data.tipo === 'tabelao'
         ? generateExcelBytes(e.data.notas, e.data.grupos)
         : generateCompareExcelBytes(e.data.diff);
-    // Transferível: evita copiar o buffer de volta para a main thread.
     const resposta: RespostaExcel = { ok: true, bytes };
-    (self as unknown as Worker).postMessage(resposta, [bytes.buffer]);
+    // Transferir evita copiar a planilha de volta para a main thread, mas só
+    // se houver um ArrayBuffer de verdade: passar undefined aqui quebra o
+    // postMessage com "Failed to convert value to 'object'".
+    const transferiveis =
+      bytes.buffer instanceof ArrayBuffer ? [bytes.buffer] : [];
+    (self as unknown as Worker).postMessage(resposta, transferiveis);
   } catch (err) {
     const resposta: RespostaExcel = { ok: false, erro: String(err) };
     (self as unknown as Worker).postMessage(resposta);
