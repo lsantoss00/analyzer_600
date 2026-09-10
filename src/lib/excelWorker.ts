@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { generateCompareExcelBytes, generateExcelBytes } from './excelExport';
+import { generateCompareExcelBytes, generateExcelBytes, type DadosDescarte } from './excelExport';
 import type { IeComparison } from './db';
 import type { IeGroup, NFeCompleta } from './types';
 
@@ -11,7 +11,7 @@ import type { IeGroup, NFeCompleta } from './types';
  * de segundos, sem spinner e com o botão ainda clicável.
  */
 export type PedidoExcel =
-  | { tipo: 'tabelao'; notas: NFeCompleta[]; grupos: IeGroup[] }
+  | { tipo: 'tabelao'; notas: NFeCompleta[]; grupos: IeGroup[]; descarte?: DadosDescarte }
   | { tipo: 'comparar'; diff: IeComparison };
 
 export type RespostaExcel =
@@ -22,7 +22,7 @@ self.onmessage = (e: MessageEvent<PedidoExcel>) => {
   try {
     const bytes =
       e.data.tipo === 'tabelao'
-        ? generateExcelBytes(e.data.notas, e.data.grupos)
+        ? generateExcelBytes(e.data.notas, e.data.grupos, e.data.descarte)
         : generateCompareExcelBytes(e.data.diff);
     const resposta: RespostaExcel = { ok: true, bytes };
     // Transferir evita copiar a planilha de volta para a main thread, mas só

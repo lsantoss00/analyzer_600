@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import { buildIeGroups } from './db';
 import type { IeComparison } from './db';
-import type { IeGroup, NFeCompleta } from './types';
+import type { Descartes, IeGroup, NFeCompleta, NFeDescartada } from './types';
 
 /** Limite de caracteres por célula no formato xlsx. */
 const MAX_CELULA = 32767;
@@ -138,7 +138,80 @@ export function generateCompareExcelBytes(diff: IeComparison): Uint8Array {
   return paraBytes(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
 }
 
-export function generateExcelBytes(notas: NFeCompleta[], gruposProntos?: IeGroup[]): Uint8Array {
+const ROTULO_MOTIVO: Record<NFeDescartada['motivo'], string> = {
+  cancelada: 'Cancelada por evento',
+  cfop: 'CFOP fora das regras',
+  uf: 'UF fora das regras',
+  'cfop+uf': 'CFOP e UF fora das regras',
+};
+
+/** As notas que existem mas não entram na apuração, com o porquê de cada uma. */
+function sheetDescartadas(notas: NFeDescartada[]): XLSX.WorkSheet {
+  const rows = notas.map((n) => ({
+    'Motivo': ROTULO_MOTIVO[n.motivo],
+    'Chave NF-e': n.chave,
+    'Data Emissão': n.dataEmissao,
+    'Nº NF': n.nNf,
+    'Série': n.serie,
+    'CFOP': n.cfop,
+    'IE Destinatário': n.ieDest,
+    'CNPJ Destinatário': n.cnpjDest,
+    'Nome Destinatário': n.xNome,
+    'Município': n.municipio,
+    'UF': n.ufDestino,
+    'Cons. Final': n.indFinal ? 'Sim' : 'Não',
+    'Valor NF (R$)': n.vNf,
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 26 }, { wch: 46 }, { wch: 12 }, { wch: 10 }, { wch: 6 }, { wch: 6 },
+    { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 4 }, { wch: 10 },
+    { wch: 14 },
+  ];
+  return ws;
+}
+
+/**
+ * Contagem por motivo do import. Duplicadas e falhas de leitura não têm linha
+ * na aba de descartadas — não há dado parseado ou o índice UNIQUE impede —,
+ * então esta aba é o único lugar onde elas aparecem.
+ */
+function sheetResumoImport(d: Descartes | null, totalArquivos: number, totalValido: number): XLSX.WorkSheet {
+  const linhas: Array<[string, number | string]> = [
+    ['Arquivos lidos da pasta', totalArquivos],
+    ['Notas válidas gravadas', totalValido],
+  ];
+  if (d) {
+    linhas.push(
+      ['— Canceladas por evento', d.cancelados ?? 0],
+      ['— Eventos de cancelamento (não são nota)', d.eventos ?? 0],
+      ['— Chave duplicada na pasta', d.duplicados ?? 0],
+      ['— Não é NF-e', d.naoEhNfe ?? 0],
+      ['— XML inválido', d.xmlInvalido ?? 0],
+      ['— Erro de leitura', d.erroLeitura ?? 0],
+      ['— Arquivo acima de 50 MB', d.arquivoGrande ?? 0],
+      ['— Já existiam no lote', d.jaExistiam ?? 0],
+    );
+  } else {
+    linhas.push(['(lote importado antes desta versão — sem detalhe por motivo)', '']);
+  }
+  const ws = XLSX.utils.aoa_to_sheet([['Indicador', 'Quantidade'], ...linhas]);
+  ws['!cols'] = [{ wch: 44 }, { wch: 14 }];
+  return ws;
+}
+
+export interface DadosDescarte {
+  notas: NFeDescartada[];
+  descartes: Descartes | null;
+  totalArquivos: number;
+  totalValido: number;
+}
+
+export function generateExcelBytes(
+  notas: NFeCompleta[],
+  gruposProntos?: IeGroup[],
+  descarte?: DadosDescarte,
+): Uint8Array {
   const groups = gruposProntos ?? buildIeGroups(notas);
   const wb = XLSX.utils.book_new();
 
@@ -160,6 +233,15 @@ export function generateExcelBytes(notas: NFeCompleta[], gruposProntos?: IeGroup
   XLSX.utils.book_append_sheet(wb, wsNcf, 'IEs Elegíveis (NCF)');
   XLSX.utils.book_append_sheet(wb, wsNotas, 'Lista de Notas');
   XLSX.utils.book_append_sheet(wb, wsIes, 'IEs Distintas');
+
+  if (descarte) {
+    XLSX.utils.book_append_sheet(wb, sheetDescartadas(descarte.notas), 'Notas Descartadas');
+    XLSX.utils.book_append_sheet(
+      wb,
+      sheetResumoImport(descarte.descartes, descarte.totalArquivos, descarte.totalValido),
+      'Resumo do Import',
+    );
+  }
 
   return paraBytes(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }));
 }

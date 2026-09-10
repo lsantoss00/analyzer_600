@@ -111,6 +111,18 @@ fn migrations() -> Vec<tauri_plugin_sql::Migration> {
             DROP INDEX IF EXISTS idx_notas_ie_cnpj;
         ",
         kind: tauri_plugin_sql::MigrationKind::Up,
+    },
+    // Notas canceladas por evento passam a ser GRAVADAS, marcadas — antes eram
+    // descartadas antes do INSERT e sobrava só a contagem, sem como justificar
+    // numa apuração quais notas foram excluídas e por quê. NULL = nota válida;
+    // TODA query de tela filtra por IS NULL, senão elas vazam para os KPIs.
+    tauri_plugin_sql::Migration {
+        version: 6,
+        description: "add_nota_descarte_motivo",
+        sql: "
+            ALTER TABLE notas ADD COLUMN descarte_motivo TEXT DEFAULT NULL;
+        ",
+        kind: tauri_plugin_sql::MigrationKind::Up,
     }]
 }
 

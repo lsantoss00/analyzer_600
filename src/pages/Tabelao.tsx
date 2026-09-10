@@ -49,13 +49,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useAppData } from '@/contexts/AppDataContext';
-import { buildIeGroups, compareIeGroups, fetchNotasByLotes, fetchNotasCompletasByLotes } from '@/lib/db';
+import { buildIeGroups, compareIeGroups, fetchNotasByLotes, fetchNotasCanceladasByLotes, fetchNotasCompletasByLotes } from '@/lib/db';
 import { applyNotaRules } from '@/lib/rules';
 import type { BusinessRules } from '@/lib/rules';
 import { useSelectedEmpresa } from '@/lib/useSelectedEmpresa';
 import { gerarExcelComparacao, gerarExcelTabelao } from '@/lib/excelClient';
 import { generatePdfBytes, type PdfMode } from '@/lib/pdfExport';
-import type { IeGroup, Lote, NFe, Resumo } from '@/lib/types';
+import type { IeGroup, Lote, NFe, NFeCompleta, NFeDescartada, Resumo } from '@/lib/types';
 import { brl, formatCnpj, formatDate } from '@/lib/utils';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -715,7 +715,44 @@ export default function Tabelao() {
       const completas = await fetchNotasCompletasByLotes(selectedLoteIds);
       const notasExport = completas.filter((n) => idsFiltrados.has(n.id));
 
-      const bytes = await gerarExcelTabelao(notasExport, filteredGroups);
+      // Aba de descartadas: as canceladas vêm marcadas do banco; as que caíram
+      // por CFOP/UF são as que sobram do conjunto completo. Mesmo predicado do
+      // applyNotaRules, inclusive a saída de lista de UF vazia.
+      const canceladas = await fetchNotasCanceladasByLotes(selectedLoteIds);
+      const cfopSet = new Set(rules.cfops);
+      const ufSet = new Set(rules.ufs.map((u) => u.toUpperCase()));
+      const ufOk = (n: NFeCompleta) =>
+        ufSet.size === 0 || ufSet.has(n.ufDestino.toUpperCase());
+
+      const porRegra: NFeDescartada[] = completas
+        .filter((n) => !cfopSet.has(n.cfop) || !ufOk(n))
+        .map((n) => ({
+          ...n,
+          motivo: (!cfopSet.has(n.cfop) && !ufOk(n)
+            ? 'cfop+uf'
+            : !cfopSet.has(n.cfop)
+              ? 'cfop'
+              : 'uf') as NFeDescartada['motivo'],
+        }));
+
+      const descartadas: NFeDescartada[] = [
+        ...canceladas.map((n) => ({ ...n, motivo: 'cancelada' as const })),
+        ...porRegra,
+      ];
+
+      const loteAtual = doneLotes.find((l) => l.id === selectedLoteIds[0]);
+      const bytes = await gerarExcelTabelao(notasExport, filteredGroups, {
+        notas: descartadas,
+        // Só faz sentido com um lote: com vários, os totais e o detalhe de
+        // motivos seriam de lotes diferentes misturados.
+        descartes: selectedLoteIds.length === 1 ? (loteAtual?.descartes ?? null) : null,
+        totalArquivos: doneLotes
+          .filter((l) => selectedLoteIds.includes(l.id))
+          .reduce((s, l) => s + l.totalArquivos, 0),
+        totalValido: doneLotes
+          .filter((l) => selectedLoteIds.includes(l.id))
+          .reduce((s, l) => s + l.totalValido, 0),
+      });
       await writeFile(savePath, bytes);
       toast.success(`Excel: ${filteredGroups.length} IEs, ${notasFiltradas.length} notas`);
     } catch (err) {

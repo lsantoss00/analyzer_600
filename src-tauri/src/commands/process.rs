@@ -225,6 +225,7 @@ fn process_files_sync(
     // precisa ser calculado sobre o conjunto único para mostrar o número correto.
     let mut seen_chaves: HashSet<String> = HashSet::new();
     let mut valid: Vec<NfeParsed> = Vec::with_capacity(nfes.len());
+    let mut canceladas: Vec<NfeParsed> = Vec::new();
     for n in nfes {
         // UM balde por ARQUIVO, nunca dois. Contar as condições em separado
         // fazia uma nota cancelada que aparece duas vezes somar 2 em
@@ -233,14 +234,20 @@ fn process_files_sync(
         // uma duplicata; a primeira é que foi cancelada.
         let nova_chave = seen_chaves.insert(n.chave.clone());
         if !nova_chave {
+            // Duplicata não vira linha: o índice UNIQUE(chave, lote_id) impede
+            // duas linhas com a mesma chave, e a segunda cópia é a mesma nota.
             descartes.duplicados += 1;
         } else if !is_valid_nfe(&n, &cancelled) {
             descartes.cancelados += 1;
+            // Gravada, marcada — não entra em resumo nem em nenhuma tela, mas
+            // fica disponível para a aba de descartadas do Excel.
+            canceladas.push(n);
         } else {
             valid.push(n);
         }
     }
 
+    // Só as válidas: uma nota cancelada não existe fiscalmente.
     let resumo = compute_resumo(&valid);
     let dedup_ms = t_dedup.elapsed().as_millis() as u64;
 
@@ -274,27 +281,34 @@ fn process_files_sync(
                 id, lote_id, chave, data_emissao, cfop, uf_destino,
                 ie_dest, cnpj_dest, x_nome, ind_final, n_nf, mod_nf, serie,
                 v_nf, v_prod, v_icms, v_st, cnpj_emit, x_nome_emit,
-                natureza_operacao, municipio, uf_end
+                natureza_operacao, municipio, uf_end, descarte_motivo
             ) VALUES (
                 ?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,
-                ?14,?15,?16,?17,?18,?19,?20,?21,?22
+                ?14,?15,?16,?17,?18,?19,?20,?21,?22,?23
             )",
             )
             .map_err(|e| e.to_string())?;
 
+        // NULL em descarte_motivo = nota válida. As telas filtram por IS NULL.
+        let mut gravar = |n: &NfeParsed, motivo: Option<&str>| -> Result<usize, String> {
+            stmt.execute(rusqlite::params![
+                n.id, &lote_id, n.chave, n.data_emissao, n.cfop, n.uf_destino,
+                n.ie_dest, n.cnpj_dest, n.x_nome, n.ind_final as i32,
+                n.n_nf, n.mod_nf, n.serie,
+                n.v_nf, n.v_prod, n.v_icms, n.v_st,
+                n.cnpj_emit, n.x_nome_emit, n.natureza_operacao,
+                n.municipio, n.uf_end, motivo,
+            ])
+            .map_err(|e| e.to_string())
+        };
+
         for n in &valid {
-            let n_linhas = stmt
-                .execute(rusqlite::params![
-                    n.id, &lote_id, n.chave, n.data_emissao, n.cfop, n.uf_destino,
-                    n.ie_dest, n.cnpj_dest, n.x_nome, n.ind_final as i32,
-                    n.n_nf, n.mod_nf, n.serie,
-                    n.v_nf, n.v_prod, n.v_icms, n.v_st,
-                    n.cnpj_emit, n.x_nome_emit, n.natureza_operacao,
-                    n.municipio, n.uf_end,
-                ])
-                .map_err(|e| e.to_string())?;
             // total_valido era valid.len(), que SUPER-reporta se o OR IGNORE dispara.
-            inseridas += n_linhas;
+            inseridas += gravar(n, None)?;
+        }
+        // Fora de "inseridas": total_valido conta só o que vale fiscalmente.
+        for n in &canceladas {
+            gravar(n, Some("cancelada"))?;
         }
     }
     descartes.ja_existiam = valid.len() - inseridas;

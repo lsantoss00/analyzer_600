@@ -31,6 +31,13 @@ function rowToLote(r: Row): Lote {
   };
 }
 
+/**
+ * Notas canceladas por evento ficam gravadas com descarte_motivo preenchido
+ * para poderem ser exportadas. TODA query de tela precisa deste filtro — sem
+ * ele elas vazam para os KPIs e a contagem da meta muda.
+ */
+const SO_VALIDAS = 'descarte_motivo IS NULL';
+
 /** Colunas que as telas realmente usam. Projeção explícita em vez de SELECT *. */
 const COLUNAS_TELA =
   'id, lote_id, chave, data_emissao, cfop, uf_destino, ie_dest, cnpj_dest, ' +
@@ -161,7 +168,7 @@ export async function deleteLote(id: string): Promise<void> {
 export async function fetchNotas(loteId: string): Promise<NFe[]> {
   const d = await db();
   const rows = await d.select<Row[]>(
-    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id=$1`,
+    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id=$1 AND ${SO_VALIDAS}`,
     [loteId],
   );
   return rows.map(rowToNfe);
@@ -172,7 +179,7 @@ export async function fetchNotasByLotes(loteIds: string[]): Promise<NFe[]> {
   const d = await db();
   const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
   const rows = await d.select<Row[]>(
-    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id IN (${placeholders})`,
+    `SELECT ${COLUNAS_TELA} FROM notas WHERE lote_id IN (${placeholders}) AND ${SO_VALIDAS}`,
     loteIds,
   );
   return rows.map(rowToNfe);
@@ -187,7 +194,23 @@ export async function fetchNotasCompletasByLotes(loteIds: string[]): Promise<NFe
   const d = await db();
   const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
   const rows = await d.select<Row[]>(
-    `SELECT * FROM notas WHERE lote_id IN (${placeholders})`,
+    `SELECT * FROM notas WHERE lote_id IN (${placeholders}) AND ${SO_VALIDAS}`,
+    loteIds,
+  );
+  return rows.map(rowToNfeCompleta);
+}
+
+/**
+ * As notas gravadas COM motivo de descarte — hoje só as canceladas por evento.
+ * Duplicadas não viram linha (o índice UNIQUE(chave, lote_id) impede) e XML
+ * inválido não tem dado parseado, então essas só existem como contagem.
+ */
+export async function fetchNotasCanceladasByLotes(loteIds: string[]): Promise<NFeCompleta[]> {
+  if (loteIds.length === 0) return [];
+  const d = await db();
+  const placeholders = loteIds.map((_, i) => `$${i + 1}`).join(',');
+  const rows = await d.select<Row[]>(
+    `SELECT * FROM notas WHERE lote_id IN (${placeholders}) AND descarte_motivo IS NOT NULL`,
     loteIds,
   );
   return rows.map(rowToNfeCompleta);
@@ -209,6 +232,7 @@ export async function fetchNotasByIe(ieKey: string, loteIds: string[]): Promise<
   const rows = await d.select<Row[]>(
     `SELECT ${COLUNAS_TELA} FROM notas
       WHERE lote_id IN (${placeholders})
+        AND ${SO_VALIDAS}
         AND (ie_dest = ${ieParam} OR (ie_dest = '' AND cnpj_dest = ${ieParam}))`,
     [...loteIds, ieKey],
   );

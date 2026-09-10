@@ -1,5 +1,6 @@
 import type { IeComparison } from './db';
 import type { IeGroup, NFeCompleta } from './types';
+import type { DadosDescarte } from './excelExport';
 import type { PedidoExcel, RespostaExcel } from './excelWorker';
 
 /**
@@ -26,8 +27,12 @@ function executar(pedido: PedidoExcel, transferir: Transferable[]): Promise<Uint
   });
 }
 
-export function gerarExcelTabelao(notas: NFeCompleta[], grupos: IeGroup[]): Promise<Uint8Array> {
-  return executar({ tipo: 'tabelao', notas, grupos }, []);
+export function gerarExcelTabelao(
+  notas: NFeCompleta[],
+  grupos: IeGroup[],
+  descarte?: DadosDescarte,
+): Promise<Uint8Array> {
+  return executar({ tipo: 'tabelao', notas, grupos, descarte }, []);
 }
 
 export function gerarExcelComparacao(diff: IeComparison): Promise<Uint8Array> {

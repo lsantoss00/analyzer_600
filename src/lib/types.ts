@@ -21,6 +21,14 @@ export interface NFe {
   ufEnd: string;
 }
 
+/** Por que a nota não conta. Só as canceladas viram linha no banco. */
+export type MotivoDescarteNota = 'cancelada' | 'cfop' | 'uf' | 'cfop+uf';
+
+/** Nota que não entra na apuração, com o motivo. Só existe na exportação. */
+export interface NFeDescartada extends NFeCompleta {
+  motivo: MotivoDescarteNota;
+}
+
 /** Acrescenta os campos que só a aba "Lista de Notas" do Excel consome. */
 export interface NFeCompleta extends NFe {
   vProd: number;
