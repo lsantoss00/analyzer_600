@@ -832,7 +832,7 @@ export default function Tabelao() {
           <div className="flex items-center gap-2">
             {empresasComLotes.length > 1 && (
               <Select value={selectedEmpresaId} onValueChange={handleEmpresaChange}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-auto min-w-56 max-w-96">
                   <SelectValue>
                     {empresa.nome}
                   </SelectValue>

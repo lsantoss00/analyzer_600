@@ -216,7 +216,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-2">
             {empresasComLotes.length > 1 && (
               <Select value={selectedEmpresaId} onValueChange={handleEmpresaChange}>
-                <SelectTrigger className="w-44">
+                <SelectTrigger className="w-auto min-w-56 max-w-96">
                   <SelectValue>
                     {empresasComLotes.find((e) => e.id === selectedEmpresaId)?.nome}
                   </SelectValue>
@@ -229,7 +229,7 @@ export default function Dashboard() {
               </Select>
             )}
             <Select value={selectedLoteId} onValueChange={(v) => setSelectedLoteId(v ?? ALL_LOTES)}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-auto min-w-48 max-w-72">
                 <SelectValue>{loteLabel}</SelectValue>
               </SelectTrigger>
               <SelectContent>

@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { type CellHookData } from 'jspdf-autotable';
 import { buildMesGroups } from './db';
 import type { IeGroup, NFe, Resumo } from './types';
 import { brl, formatCnpj } from '@/lib/utils';
@@ -9,6 +9,25 @@ import { brl, formatCnpj } from '@/lib/utils';
  * as outras duas incluem a tabela de IEs, que é o que sustenta a apuração.
  */
 export type PdfMode = 'kpis' | 'todas' | 'elegiveis';
+
+type Alinhamento = 'left' | 'right' | 'center';
+
+/**
+ * Repete no cabeçalho o alinhamento de cada coluna.
+ *
+ * O jspdf-autotable aplica columnStyles SÓ ao corpo da tabela
+ * (`sectionName === 'body' ? columnStyles : {}`), então uma coluna numérica
+ * ficava com o valor à direita e o título à esquerda — e, sem largura definida,
+ * a coluna esticava pela página inteira, deixando os dois a centímetros um do
+ * outro. Isto é o que alinha os dois.
+ */
+function alinharCabecalho(alinhamentos: Record<number, Alinhamento>) {
+  return (data: CellHookData) => {
+    if (data.section !== 'head') return;
+    const a = alinhamentos[data.column.index];
+    if (a) data.cell.styles.halign = a;
+  };
+}
 
 export function generatePdfBytes(
   notas: NFe[],
@@ -48,7 +67,14 @@ export function generatePdfBytes(
     theme: 'striped',
     headStyles: { fillColor: [30, 64, 175] },
     styles: { fontSize: 10 },
-    columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } },
+    // tableWidth wrap + larguras fixas: sem isso a tabela ocupa os 269mm da
+    // página e o valor fica longe do indicador.
+    tableWidth: 'wrap',
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 62 },
+      1: { halign: 'right', cellWidth: 40 },
+    },
+    didParseCell: alinharCabecalho({ 1: 'right' }),
     margin: { left: 14, right: 14 },
   });
 
@@ -71,13 +97,15 @@ export function generatePdfBytes(
     theme: 'striped',
     headStyles: { fillColor: [30, 64, 175] },
     styles: { fontSize: 9 },
+    tableWidth: 'wrap',
     columnStyles: {
-      0: { fontStyle: 'bold' },
-      1: { halign: 'right' },
-      2: { halign: 'right' },
-      3: { halign: 'right' },
-      4: { halign: 'right' },
+      0: { fontStyle: 'bold', cellWidth: 30 },
+      1: { halign: 'right', cellWidth: 24 },
+      2: { halign: 'right', cellWidth: 22 },
+      3: { halign: 'right', cellWidth: 28 },
+      4: { halign: 'right', cellWidth: 40 },
     },
+    didParseCell: alinharCabecalho({ 1: 'right', 2: 'right', 3: 'right', 4: 'right' }),
     margin: { left: 14, right: 14 },
   });
 
@@ -120,6 +148,7 @@ export function generatePdfBytes(
         5: { halign: 'right', cellWidth: 28 },
         6: { halign: 'center', cellWidth: 12 },
       },
+      didParseCell: alinharCabecalho({ 4: 'right', 5: 'right', 6: 'center' }),
       margin: { left: 14, right: 14 },
     });
   }
