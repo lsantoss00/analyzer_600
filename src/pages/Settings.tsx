@@ -85,7 +85,7 @@ export default function Settings() {
             </p>
 
             {/* Row 1: UF + CFOP */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="regra-ufs">UF(s) de destino</Label>
                 <Input
@@ -112,7 +112,7 @@ export default function Settings() {
             </div>
 
             {/* Row 2: Meta + Valor mínimo */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="meta-ies">Meta de IEs por trimestre</Label>
                 <Input

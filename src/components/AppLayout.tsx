@@ -16,7 +16,7 @@ function OnboardingScreen() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-6 max-w-xl w-full">
+      <div className="grid grid-cols-1 gap-6 max-w-xl w-full sm:grid-cols-3">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <span className="text-lg font-bold">+</span>

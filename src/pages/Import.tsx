@@ -78,7 +78,7 @@ function DiscardedSection({ all, rules }: { all: NFe[]; rules: BusinessRules }) 
             <strong>Configurações → Regras de Negócio</strong>.
           </p>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="rounded-md bg-muted/40 px-3 py-2">
               <p className="text-lg font-bold text-amber-300">{byCfop.length.toLocaleString('pt-BR')}</p>
               <p className="text-xs text-muted-foreground">CFOP fora das regras</p>

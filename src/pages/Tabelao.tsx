@@ -216,7 +216,7 @@ function CompareView({
   return (
     <div className="space-y-5">
       {/* Period selectors */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-border px-4 py-3 space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Período A (base)</p>
           <div className="flex flex-wrap gap-1.5">

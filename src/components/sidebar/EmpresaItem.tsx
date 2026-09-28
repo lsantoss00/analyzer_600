@@ -16,6 +16,7 @@ import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { notify } from '@/lib/notify';
 import { markLoteError } from '@/lib/db';
+import { MAX_CNPJ, MAX_NOME_EMPRESA, MAX_NOME_LOTE, limitar } from '@/lib/limites';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Empresa, Resumo } from '@/lib/types';
 import { Button } from '../ui/button';
@@ -248,11 +249,20 @@ export default function EmpresaItem({ empresa }: Props) {
           <div className="grid gap-3 py-2">
             <div className="grid gap-1.5">
               <Label>Nome *</Label>
-              <Input value={nome} onChange={(e) => setNome(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleEdit()} />
+              <Input
+                value={nome}
+                onChange={(e) => setNome(limitar(e.target.value, MAX_NOME_EMPRESA))}
+                maxLength={MAX_NOME_EMPRESA}
+                onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
+              />
             </div>
             <div className="grid gap-1.5">
               <Label>CNPJ</Label>
-              <Input value={cnpj} onChange={(e) => setCnpj(e.target.value)} />
+              <Input
+                value={cnpj}
+                onChange={(e) => setCnpj(limitar(e.target.value, MAX_CNPJ))}
+                maxLength={MAX_CNPJ}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -281,9 +291,9 @@ export default function EmpresaItem({ empresa }: Props) {
                   <Label>Nome do lote *</Label>
                   <Input
                     value={loteNome}
-                    onChange={(e) => setLoteNome(e.target.value.slice(0, 200))}
+                    onChange={(e) => setLoteNome(limitar(e.target.value, MAX_NOME_LOTE))}
                     onKeyDown={(e) => e.key === 'Enter' && handleProcess()}
-                    maxLength={200}
+                    maxLength={MAX_NOME_LOTE}
                     autoFocus
                   />
                 </div>

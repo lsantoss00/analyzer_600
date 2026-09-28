@@ -24,6 +24,7 @@ import { NavLink } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppData } from '@/contexts/AppDataContext';
 import { useSidebarLargura } from '@/lib/useSidebarLargura';
+import { MAX_CNPJ, MAX_NOME_EMPRESA, limitar } from '@/lib/limites';
 import { Button } from './ui/button';
 import {
   Dialog,
@@ -257,7 +258,8 @@ export default function AppSidebar() {
               <Input
                 placeholder="Nome da empresa"
                 value={nome}
-                onChange={(e) => setNome(e.target.value)}
+                onChange={(e) => setNome(limitar(e.target.value, MAX_NOME_EMPRESA))}
+                maxLength={MAX_NOME_EMPRESA}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               />
             </div>
@@ -266,7 +268,8 @@ export default function AppSidebar() {
               <Input
                 placeholder="00.000.000/0000-00"
                 value={cnpj}
-                onChange={(e) => setCnpj(e.target.value)}
+                onChange={(e) => setCnpj(limitar(e.target.value, MAX_CNPJ))}
+                maxLength={MAX_CNPJ}
               />
             </div>
           </div>

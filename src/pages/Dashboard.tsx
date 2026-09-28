@@ -278,7 +278,7 @@ export default function Dashboard() {
             )}
 
             {/* KPI row */}
-            <div className="grid grid-cols-4 gap-3 shrink-0">
+            <div className="grid grid-cols-2 gap-3 shrink-0 xl:grid-cols-4">
               <StatCard
                 label="Total de Notas"
                 value={resumo.notasTotais.toLocaleString('pt-BR')}
@@ -305,9 +305,9 @@ export default function Dashboard() {
             </div>
 
             {/* Charts row */}
-            <div className="grid grid-cols-3 gap-4" style={{ height: '260px' }}>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {/* Donut */}
-              <Card className="flex flex-col overflow-hidden">
+              <Card className="flex h-[260px] flex-col overflow-hidden">
                 <CardHeader className="pb-1 shrink-0">
                   <CardTitle className="text-sm font-medium">IEs por Tipo</CardTitle>
                 </CardHeader>
@@ -344,7 +344,7 @@ export default function Dashboard() {
               </Card>
 
               {/* Monthly bar */}
-              <Card className="col-span-2 flex flex-col overflow-hidden">
+              <Card className="flex h-[260px] flex-col overflow-hidden lg:col-span-2">
                 <CardHeader className="pb-1 shrink-0">
                   <CardTitle className="text-sm font-medium">Valor por Mês (R$)</CardTitle>
                 </CardHeader>

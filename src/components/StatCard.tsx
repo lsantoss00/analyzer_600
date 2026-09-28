@@ -19,13 +19,15 @@ const accentColors = {
 export default function StatCard({ label, value, icon: Icon, sub, accent = 'default' }: Props) {
   return (
     <Card>
-      <CardContent className="flex items-start justify-between p-5">
-        <div>
-          <p className="text-sm text-muted-foreground">{label}</p>
-          <p className="mt-1 text-2xl font-bold tracking-tight">{value}</p>
-          {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+      <CardContent className="flex items-start justify-between gap-3 p-5">
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground truncate">{label}</p>
+          <p className="mt-1 truncate text-2xl font-bold tracking-tight" title={String(value)}>
+            {value}
+          </p>
+          {sub && <p className="mt-0.5 text-xs text-muted-foreground truncate">{sub}</p>}
         </div>
-        <div className={`rounded-lg p-2 ${accentColors[accent]}`}>
+        <div className={`shrink-0 rounded-lg p-2 ${accentColors[accent]}`}>
           <Icon className="h-5 w-5" />
         </div>
       </CardContent>

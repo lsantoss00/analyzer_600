@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppData } from '@/contexts/AppDataContext';
 import type { Lote } from '@/lib/types';
+import { MAX_NOME_LOTE, limitar } from '@/lib/limites';
 import { Button } from '../ui/button';
 import {
   Dialog,
@@ -115,9 +116,9 @@ export default function LoteItem({ lote, empresaId: _empresaId }: Props) {
           <DialogHeader><DialogTitle>Renomear Lote</DialogTitle></DialogHeader>
           <Input
             value={nome}
-            onChange={(e) => setNome(e.target.value.slice(0, 200))}
+            onChange={(e) => setNome(limitar(e.target.value, MAX_NOME_LOTE))}
             onKeyDown={(e) => e.key === 'Enter' && handleEdit()}
-            maxLength={200}
+            maxLength={MAX_NOME_LOTE}
             className="mt-2"
           />
           <DialogFooter className="mt-4">
